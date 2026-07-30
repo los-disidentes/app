@@ -1,5 +1,5 @@
-// Service Worker — Los Disidentes App v3
-const CACHE = 'disidentes-v3';
+// Service Worker — Los Disidentes App v4
+const CACHE = 'disidentes-v4';
 const PRECACHE = [
   '/app/',
   '/app/index.html',
@@ -26,6 +26,11 @@ self.addEventListener('activate', e => {
       ))
       .then(() => self.clients.claim())
   );
+});
+
+// Mensaje desde la app para activar nuevo SW inmediatamente
+self.addEventListener('message', e => {
+  if (e.data?.type === 'SKIP_WAITING') self.skipWaiting();
 });
 
 // Fetch: network-first para API y Firebase, cache-first para assets

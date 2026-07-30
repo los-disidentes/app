@@ -270,6 +270,19 @@
     .pin-digit:focus { border-color: var(--green); background: #fff; }
     .auth-error { min-height: 20px; font-size: 0.78rem; color: var(--grape); text-align: center; margin-bottom: 8px; }
 
+    /* ── UPDATE BANNER ──────────────────────────── */
+    #update-banner {
+      background: var(--grape); color: #fff;
+      padding: 8px 16px; text-align: center; font-size: 0.8rem;
+      cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px;
+      flex-shrink: 0; animation: su .4s ease;
+    }
+    #update-banner .upd-btn {
+      background: rgba(255,255,255,0.22); border: 1px solid rgba(255,255,255,0.4);
+      color: #fff; padding: 3px 14px; border-radius: 20px;
+      font-size: 0.76rem; cursor: pointer; font-family: var(--sans); font-weight: 600;
+    }
+
     /* ── TOAST ───────────────────────────────────── */
     .toast { position: fixed; bottom: 72px; left: 50%; transform: translateX(-50%); background: var(--green-deep); color: #fff; border-radius: 8px; padding: 9px 18px; font-size: 0.84rem; z-index: 200; animation: su .3s ease; max-width: 300px; text-align: center; pointer-events: none; box-shadow: 0 4px 16px rgba(0,0,0,0.25); }
     @keyframes su { from { opacity:0; transform:translateX(-50%) translateY(10px); } to { opacity:1; transform:translateX(-50%) translateY(0); } }
@@ -301,6 +314,13 @@
   <div id="status-bar">
     <span class="sdot" id="sdot"></span>
     <span id="stext">Iniciando…</span>
+    <span id="online-list" style="margin-left:auto; font-size:0.6rem; color:rgba(174,205,185,0.7); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:58%;"></span>
+  </div>
+
+  <!-- BANNER DE ACTUALIZACIÓN (se muestra solo cuando hay nueva versión) -->
+  <div id="update-banner" class="hidden" onclick="applyUpdate()">
+    ✨ Nueva versión disponible
+    <button class="upd-btn">Actualizar ahora</button>
   </div>
 
   <!-- HEADER -->
@@ -517,6 +537,7 @@
     standings:    JSON.parse(localStorage.getItem('standings') || '[]'),
     lbf:          JSON.parse(localStorage.getItem('lbf')       || '[]'),
     lbfLocked:    localStorage.getItem('lbfLocked') === 'true',
+    online:       {},
     attendance:   {},
     chat:         [],
     perfs:        [],
@@ -527,6 +548,31 @@
     lastChatSeen: parseInt(localStorage.getItem('lastChatSeen') || '0'),
     perfLoaded:   false,
   };
+
+  // ═══════════════════════════════════════════
+  // PRESENCIA — quién está en línea
+  // ═══════════════════════════════════════════
+  function renderOnline() {
+    const el = document.getElementById('online-list');
+    if (!el) return;
+    const list = Object.values(ST.online);
+    if (!list.length) { el.textContent = ''; return; }
+    const names = list.map(p => p.name.split(' ')[0]);
+    el.textContent = `· ${names.join(', ')} en línea`;
+  }
+
+  // ═══════════════════════════════════════════
+  // ACTUALIZACIÓN — Service Worker
+  // ═══════════════════════════════════════════
+  function showUpdateBanner() {
+    const b = document.getElementById('update-banner');
+    if (b) b.classList.remove('hidden');
+  }
+  function applyUpdate() {
+    navigator.serviceWorker.getRegistration('/app/').then(reg => {
+      if (reg?.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+    });
+  }
 
   // ═══════════════════════════════════════════
   // STATUS / TOAST
@@ -566,8 +612,13 @@
     [0,1,2,3].forEach(i => { const el = document.getElementById(`pin-${i}`); if(el) el.value=''; });
   }
 
+  // Normalizar nombre: trim, uppercase, colapsar espacios múltiples
+  function normalizeName(n) {
+    return (n || '').trim().toUpperCase().replace(/\s+/g, ' ');
+  }
+
   async function tryLogin() {
-    const name  = document.getElementById('pname-inp').value.trim().toUpperCase();
+    const name  = normalizeName(document.getElementById('pname-inp').value);
     const pin   = getPin();
     const errEl = document.getElementById('auth-error');
     const btn   = document.getElementById('auth-btn');
@@ -594,7 +645,23 @@
           // PIN correcto → actualizar lastLogin
           ST.fbDb.ref(`players/${fbKey(name)}/lastLogin`).set(Date.now());
         } else {
-          // Jugador nuevo → registrar
+          // Jugador nuevo → verificar que no exista un nombre muy similar
+          const allSnap = await ST.fbDb.ref('players').once('value');
+          const allPlayers = allSnap.val() || {};
+          const similar = Object.values(allPlayers).find(p => {
+            // Chequear si los nombres son casi iguales (uno contiene al otro, o difieren solo en espacios)
+            const a = p.name.replace(/\s+/g,'').toUpperCase();
+            const b = name.replace(/\s+/g,'').toUpperCase();
+            return a === b;
+          });
+          if (similar) {
+            // Ya existe con ese nombre normalizado → tratar como login con PIN incorrecto
+            errEl.textContent = `⚠️ "${similar.name}" ya está registrado. ¿Es tu nombre? El PIN no coincide.`;
+            clearPinFields(); document.getElementById('pin-0').focus();
+            btn.textContent = 'Entrar al equipo 🎾'; btn.disabled = false;
+            return;
+          }
+          // Registrar jugador nuevo
           await ST.fbDb.ref(`players/${fbKey(name)}`).set({
             name, pin, createdAt: Date.now(), lastLogin: Date.now()
           });
@@ -782,7 +849,18 @@
       ST.fbDb.ref('.info/connected').on('value', s => {
         const ok = s.val() === true;
         setStatus(ok, ok ? '🍇 Conectado' : 'Reconectando…');
-        if (ok && ST.player) checkAdmin();
+        if (ok && ST.player) {
+          checkAdmin();
+          // Registrar presencia — se borra automáticamente al desconectar
+          const presRef = ST.fbDb.ref(`presence/${fbKey(ST.player)}`);
+          presRef.onDisconnect().remove();
+          presRef.set({ name: ST.player, ts: Date.now() });
+        }
+      });
+      // Escuchar quién está en línea
+      ST.fbDb.ref('presence').on('value', s => {
+        ST.online = s.val() || {};
+        renderOnline();
       });
       ST.fbDb.ref('lbf').on('value', s => {
         const d = s.val();
@@ -1546,13 +1624,31 @@
   document.addEventListener('DOMContentLoaded', init);
 
   // ═══════════════════════════════════════════
-  // SERVICE WORKER — PWA INSTALABLE
+  // SERVICE WORKER — PWA + DETECCIÓN DE UPDATES
   // ═══════════════════════════════════════════
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
       navigator.serviceWorker.register('/app/sw.js', { scope: '/app/' })
-        .then(reg => console.log('SW registrado:', reg.scope))
+        .then(reg => {
+          // Detectar cuando hay una nueva versión instalándose
+          reg.addEventListener('updatefound', () => {
+            const nw = reg.installing;
+            nw.addEventListener('statechange', () => {
+              // 'installed' + hay un SW previo = nueva versión lista
+              if (nw.state === 'installed' && navigator.serviceWorker.controller) {
+                showUpdateBanner();
+              }
+            });
+          });
+          // Chequear updates cada 60 segundos (útil si la app queda abierta)
+          setInterval(() => reg.update(), 60000);
+        })
         .catch(err => console.warn('SW error:', err));
+
+      // Cuando el nuevo SW toma control → recargar página con versión fresca
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        window.location.reload();
+      });
     });
   }
   </script>
