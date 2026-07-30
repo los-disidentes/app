@@ -8,18 +8,14 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="icon" href="https://los-disidentes.github.io/logo.png">
   <title>Los Disidentes · App</title>
-
-  <!-- Fonts — same as the official site -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400;1,700&family=Inter:wght@400;500;600;700;800&display=swap">
-
-  <!-- Firebase SDK v9 compat -->
   <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
 
   <style>
-    /* ── VARIABLES (del sitio oficial) ─────────────────── */
+    /* ── VARIABLES ─────────────────────────────── */
     :root {
       --cream:      #f6f4ee;
       --paper:      #ffffff;
@@ -32,86 +28,65 @@
       --ink:        #1e2a24;
       --muted:      #74827b;
       --line:       #e5e1d6;
-      --serif:      'Cormorant Garamond', Georgia, 'Times New Roman', serif;
-      --sans:       'Inter', system-ui, -apple-system, sans-serif;
+      --serif:      'Cormorant Garamond', Georgia, serif;
+      --sans:       'Inter', system-ui, sans-serif;
       --r:          13px;
       --shadow:     0 2px 16px rgba(28,91,58,0.08);
       --shadow-md:  0 4px 28px rgba(28,91,58,0.13);
     }
-
-    /* ── RESET ─────────────────────────────────────────── */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html { font-size: 15px; scroll-behavior: smooth; }
     html, body { height: 100%; overflow: hidden; }
     body {
-      font-family: var(--sans);
-      background: var(--cream);
-      color: var(--ink);
-      display: flex;
-      flex-direction: column;
-      -webkit-font-smoothing: antialiased;
+      font-family: var(--sans); background: var(--cream); color: var(--ink);
+      display: flex; flex-direction: column; -webkit-font-smoothing: antialiased;
     }
     ::selection { background: var(--green); color: #fff; }
 
-    /* ── STATUS BAR ─────────────────────────────────────── */
+    /* ── STATUS BAR ─────────────────────────────── */
     #status-bar {
       display: flex; align-items: center; gap: 6px;
-      padding: 4px 16px;
-      background: var(--green-deep);
-      font-size: 0.66rem; color: rgba(255,255,255,0.6);
-      font-family: var(--sans); letter-spacing: 0.3px;
-      flex-shrink: 0;
+      padding: 4px 16px; background: var(--green-deep);
+      font-size: 0.66rem; color: rgba(255,255,255,0.6); letter-spacing: 0.3px; flex-shrink: 0;
     }
     .sdot { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); transition: background .4s; }
     .sdot.on  { background: var(--lime); }
     .sdot.off { background: #c0392b; }
 
-    /* ── HEADER ─────────────────────────────────────────── */
+    /* ── HEADER ─────────────────────────────────── */
     .header {
-      background: rgba(12,46,30,0.92);
-      backdrop-filter: blur(12px);
+      background: rgba(12,46,30,0.92); backdrop-filter: blur(12px);
       border-bottom: 1px solid rgba(255,255,255,0.07);
-      padding: 10px 16px;
-      display: flex; align-items: center; gap: 12px;
-      flex-shrink: 0;
-      color: #fff;
+      padding: 10px 16px; display: flex; align-items: center; gap: 12px;
+      flex-shrink: 0; color: #fff;
     }
     .header-logo { width: 36px; height: 44px; flex-shrink: 0; object-fit: contain; }
     .header-title { flex: 1; }
     .header-title h1 {
-      font-family: var(--serif);
-      font-size: 1.2rem; font-weight: 700; font-style: italic;
-      color: #fff; line-height: 1.1; letter-spacing: 0.2px;
+      font-family: var(--serif); font-size: 1.2rem; font-weight: 700; font-style: italic;
+      color: #fff; line-height: 1.1;
     }
-    .header-title span {
-      font-size: 0.62rem; color: rgba(174,205,185,0.85);
-      text-transform: uppercase; letter-spacing: 1.5px;
-    }
+    .header-title span { font-size: 0.62rem; color: rgba(174,205,185,0.85); text-transform: uppercase; letter-spacing: 1.5px; }
     .player-badge {
-      background: rgba(255,255,255,0.1);
-      border: 1px solid rgba(255,255,255,0.18);
+      background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.18);
       border-radius: 20px; padding: 5px 13px;
       font-size: 0.72rem; color: #fff; cursor: pointer;
-      white-space: nowrap; max-width: 110px; overflow: hidden; text-overflow: ellipsis;
+      white-space: nowrap; max-width: 120px; overflow: hidden; text-overflow: ellipsis;
       transition: background .2s;
     }
     .player-badge:hover { background: rgba(255,255,255,0.18); }
+    .admin-crown { font-size: 0.8rem; margin-left: 2px; display: none; }
 
-    /* ── NAV ────────────────────────────────────────────── */
+    /* ── NAV ────────────────────────────────────── */
     .nav {
-      display: flex;
-      background: var(--paper);
-      border-bottom: 1px solid var(--line);
-      overflow-x: auto; scrollbar-width: none;
-      flex-shrink: 0;
+      display: flex; background: var(--paper); border-bottom: 1px solid var(--line);
+      overflow-x: auto; scrollbar-width: none; flex-shrink: 0;
       box-shadow: 0 1px 8px rgba(28,91,58,0.06);
     }
     .nav::-webkit-scrollbar { display: none; }
     .nav-btn {
-      flex: 1; min-width: 55px; padding: 9px 4px;
-      border: none; background: none;
-      color: var(--muted);
-      font-family: var(--sans); font-size: 0.58rem; font-weight: 600;
+      flex: 1; min-width: 55px; padding: 9px 4px; border: none; background: none;
+      color: var(--muted); font-family: var(--sans); font-size: 0.58rem; font-weight: 600;
       cursor: pointer; text-transform: uppercase; letter-spacing: .5px;
       display: flex; flex-direction: column; align-items: center; gap: 3px;
       position: relative; transition: color .2s;
@@ -124,91 +99,52 @@
     }
     .nbadge {
       position: absolute; top: 6px; right: 8px;
-      background: var(--grape); color: #fff;
-      border-radius: 10px; padding: 1px 5px;
-      font-size: 0.58rem; font-weight: 700;
+      background: var(--grape); color: #fff; border-radius: 10px;
+      padding: 1px 5px; font-size: 0.58rem; font-weight: 700;
     }
 
-    /* ── CONTENT ────────────────────────────────────────── */
+    /* ── CONTENT ─────────────────────────────────── */
     .tab { flex: 1; overflow-y: auto; padding: 16px; display: none; background: var(--cream); }
     .tab.active { display: block; }
     #tab-chat.active { display: flex; flex-direction: column; padding: 0; }
-
-    /* ── SCROLLBAR ──────────────────────────────────────── */
     ::-webkit-scrollbar { width: 4px; }
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: var(--line); border-radius: 2px; }
 
-    /* ── CARDS ──────────────────────────────────────────── */
-    .card {
-      background: var(--paper);
-      border: 1px solid var(--line);
-      border-radius: var(--r);
-      padding: 16px;
-      margin-bottom: 12px;
-      box-shadow: var(--shadow);
-    }
-    .card-title {
-      font-family: var(--serif);
-      font-size: 1rem; font-weight: 600;
-      color: var(--green-dk);
-      margin-bottom: 10px;
-      display: flex; align-items: center; gap: 7px;
-    }
+    /* ── CARDS ──────────────────────────────────── */
+    .card { background: var(--paper); border: 1px solid var(--line); border-radius: var(--r); padding: 16px; margin-bottom: 12px; box-shadow: var(--shadow); }
+    .card-title { font-family: var(--serif); font-size: 1rem; font-weight: 600; color: var(--green-dk); margin-bottom: 10px; display: flex; align-items: center; gap: 7px; }
+    .slabel { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 1.2px; color: var(--muted); margin: 14px 0 7px; font-weight: 600; }
 
-    /* ── SECTION LABEL ──────────────────────────────────── */
-    .slabel {
-      font-size: 0.62rem; text-transform: uppercase; letter-spacing: 1.2px;
-      color: var(--muted); margin: 14px 0 7px; font-weight: 600;
-    }
-
-    /* ── MATCH HERO ─────────────────────────────────────── */
+    /* ── MATCH HERO ──────────────────────────────── */
     .match-hero {
       background: radial-gradient(at 50% 0%, var(--green) 0%, var(--green-dk) 50%, var(--green-deep) 100%);
-      border-radius: var(--r); padding: 22px 18px;
-      margin-bottom: 14px; color: #fff; text-align: center;
-      position: relative; overflow: hidden;
-      box-shadow: var(--shadow-md);
+      border-radius: var(--r); padding: 22px 18px; margin-bottom: 14px; color: #fff;
+      text-align: center; position: relative; overflow: hidden; box-shadow: var(--shadow-md);
     }
-    .match-hero::after {
-      content: ''; position: absolute; inset: 0;
-      background-image: radial-gradient(rgba(255,255,255,0.06) 1px, transparent 1px);
-      background-size: 22px 22px; pointer-events: none;
-    }
+    .match-hero::after { content: ''; position: absolute; inset: 0; background-image: radial-gradient(rgba(255,255,255,0.06) 1px, transparent 1px); background-size: 22px 22px; pointer-events: none; }
     .match-hero > * { position: relative; z-index: 1; }
-    .match-kicker {
-      font-size: 0.63rem; letter-spacing: 3px; text-transform: uppercase;
-      color: rgba(174,205,185,0.85); margin-bottom: 10px;
-    }
-    .match-vs {
-      font-family: var(--serif); font-size: 1.5rem; font-weight: 700; font-style: italic;
-      margin-bottom: 2px;
-    }
-    .match-rival {
-      font-family: var(--serif); font-size: 1.15rem; font-weight: 600;
-      color: rgba(255,255,255,0.85); margin-bottom: 14px;
-    }
+    .match-kicker { font-size: 0.63rem; letter-spacing: 3px; text-transform: uppercase; color: rgba(174,205,185,0.85); margin-bottom: 10px; }
+    .match-vs { font-family: var(--serif); font-size: 1.5rem; font-weight: 700; font-style: italic; margin-bottom: 2px; }
+    .match-rival { font-family: var(--serif); font-size: 1.15rem; font-weight: 600; color: rgba(255,255,255,0.85); margin-bottom: 14px; }
     .match-meta { display: flex; justify-content: center; gap: 16px; font-size: 0.72rem; color: rgba(255,255,255,0.65); margin-bottom: 16px; }
     .countdown-big { font-family: var(--serif); font-size: 3.2rem; font-weight: 700; line-height: 1; }
     .countdown-sub { font-size: 0.63rem; color: rgba(174,205,185,0.85); text-transform: uppercase; letter-spacing: 2px; }
 
-    /* ── RESULT CHIPS ───────────────────────────────────── */
-    .result-chip {
-      font-family: var(--serif); font-weight: 700; font-size: 1rem;
-      padding: 3px 14px; border-radius: 50px;
-    }
-    .result-chip.win  { background: rgba(28,91,58,0.1); color: var(--green); }
+    /* ── RESULT CHIPS ───────────────────────────── */
+    .result-chip { font-family: var(--serif); font-weight: 700; font-size: 1rem; padding: 3px 14px; border-radius: 50px; }
+    .result-chip.win  { background: rgba(28,91,58,0.1);   color: var(--green); }
     .result-chip.loss { background: rgba(111,61,146,0.1); color: var(--grape); }
-    .result-chip.draw { background: rgba(116,130,123,0.1); color: var(--muted); }
+    .result-chip.draw { background: rgba(116,130,123,0.1);color: var(--muted); }
 
-    /* ── STANDINGS ──────────────────────────────────────── */
+    /* ── STANDINGS ──────────────────────────────── */
     .stable { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
     .stable th { color: var(--muted); font-size: 0.63rem; text-transform: uppercase; letter-spacing: .5px; padding: 5px 7px; text-align: left; border-bottom: 1px solid var(--line); }
     .stable td { padding: 7px; border-bottom: 1px solid rgba(229,225,214,0.6); }
     .stable tr.me td { color: var(--green); font-weight: 700; }
     .stable tr:hover td { background: rgba(28,91,58,0.03); }
 
-    /* ── ATTENDANCE ─────────────────────────────────────── */
+    /* ── ATTENDANCE ──────────────────────────────── */
     .att-stats { display: flex; gap: 10px; margin-bottom: 14px; }
     .att-stat { flex: 1; background: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: 11px; text-align: center; box-shadow: var(--shadow); }
     .att-stat-n { font-family: var(--serif); font-size: 1.8rem; font-weight: 700; line-height: 1; }
@@ -216,65 +152,31 @@
     .att-stat.g .att-stat-n { color: var(--green); }
     .att-stat.r .att-stat-n { color: var(--grape); }
     .att-stat.x .att-stat-n { color: var(--muted); }
-
     .prow { display: flex; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--line); gap: 10px; }
     .prow:last-child { border-bottom: none; }
-    .pnum {
-      width: 26px; height: 26px; border-radius: 50%;
-      background: var(--green-deep); color: rgba(174,205,185,0.9);
-      display: flex; align-items: center; justify-content: center;
-      font-family: var(--serif); font-size: 0.85rem; font-weight: 600;
-      flex-shrink: 0;
-    }
+    .pnum { width: 26px; height: 26px; border-radius: 50%; background: var(--green-deep); color: rgba(174,205,185,0.9); display: flex; align-items: center; justify-content: center; font-family: var(--serif); font-size: 0.85rem; font-weight: 600; flex-shrink: 0; }
     .pname { flex: 1; font-size: 0.88rem; font-weight: 500; }
-
     .abtn-pair { display: flex; gap: 8px; }
-    .abtn {
-      flex: 1; padding: 9px; border-radius: 8px;
-      font-size: 0.8rem; font-weight: 600; cursor: pointer;
-      background: none; transition: all .2s;
-      font-family: var(--sans);
-    }
+    .abtn { flex: 1; padding: 9px; border-radius: 8px; font-size: 0.8rem; font-weight: 600; cursor: pointer; background: none; transition: all .2s; font-family: var(--sans); }
     .abtn.confirm { border: 1.5px solid var(--green); color: var(--green); }
     .abtn.confirm.active { background: var(--green); color: #fff; }
     .abtn.decline { border: 1.5px solid var(--grape); color: var(--grape); }
     .abtn.decline.active { background: var(--grape); color: #fff; }
+    .lock-banner { background: rgba(111,61,146,0.08); border: 1px solid rgba(111,61,146,0.25); border-radius: 8px; padding: 9px 14px; font-size: 0.8rem; color: var(--grape); margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
 
-    .lock-banner {
-      background: rgba(111,61,146,0.08); border: 1px solid rgba(111,61,146,0.25);
-      border-radius: 8px; padding: 9px 14px; font-size: 0.8rem;
-      color: var(--grape); margin-bottom: 12px;
-      display: flex; align-items: center; gap: 8px;
-    }
-
-    /* ── CHIPS ──────────────────────────────────────────── */
-    .chip {
-      display: inline-flex; align-items: center; gap: 3px;
-      padding: 3px 10px; border-radius: 20px; font-size: 0.69rem; font-weight: 600;
-    }
+    /* ── CHIPS ──────────────────────────────────── */
+    .chip { display: inline-flex; align-items: center; gap: 3px; padding: 3px 10px; border-radius: 20px; font-size: 0.69rem; font-weight: 600; }
     .cg  { background: rgba(28,91,58,0.1);   color: var(--green); border: 1px solid rgba(28,91,58,0.2); }
     .cr  { background: rgba(111,61,146,0.1); color: var(--grape); border: 1px solid rgba(111,61,146,0.2); }
-    .co  { background: rgba(174,191,63,0.12); color: #6b7a0a;    border: 1px solid rgba(174,191,63,0.3); }
-    .cx  { background: rgba(116,130,123,0.1); color: var(--muted); border: 1px solid var(--line); }
+    .co  { background: rgba(174,191,63,0.12);color: #6b7a0a;    border: 1px solid rgba(174,191,63,0.3); }
+    .cx  { background: rgba(116,130,123,0.1);color: var(--muted);border: 1px solid var(--line); }
 
-    /* ── PAIRS ──────────────────────────────────────────── */
-    .fcard {
-      background: var(--paper); border: 1px solid var(--line);
-      border-radius: var(--r); padding: 14px; margin-bottom: 10px;
-      box-shadow: var(--shadow); transition: box-shadow .2s;
-    }
-    .fcard.best {
-      border-color: var(--green);
-      box-shadow: 0 4px 20px rgba(28,91,58,0.15);
-    }
+    /* ── PAIRS ──────────────────────────────────── */
+    .fcard { background: var(--paper); border: 1px solid var(--line); border-radius: var(--r); padding: 14px; margin-bottom: 10px; box-shadow: var(--shadow); transition: box-shadow .2s; }
+    .fcard.best { border-color: var(--green); box-shadow: 0 4px 20px rgba(28,91,58,0.15); }
     .crow { display: flex; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); gap: 10px; }
     .crow:last-of-type { border-bottom: none; }
-    .clabel {
-      width: 30px; height: 30px; border-radius: 50%;
-      display: flex; align-items: center; justify-content: center;
-      font-family: var(--serif); font-size: 0.85rem; font-weight: 700;
-      flex-shrink: 0;
-    }
+    .clabel { width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: var(--serif); font-size: 0.85rem; font-weight: 700; flex-shrink: 0; }
     .clabel.d1 { background: var(--green); color: #fff; }
     .clabel.d2 { background: rgba(28,91,58,0.12); color: var(--green); border: 1.5px solid rgba(28,91,58,0.3); }
     .clabel.d3 { background: transparent; color: var(--muted); border: 1.5px solid var(--line); }
@@ -283,7 +185,7 @@
     .cplayers small { color: var(--muted); font-size: 0.68rem; display: block; }
     .csum { font-family: var(--serif); font-size: 1rem; font-weight: 700; color: var(--green); }
 
-    /* ── BUTTONS ────────────────────────────────────────── */
+    /* ── BUTTONS ─────────────────────────────────── */
     .btn { padding: 10px 20px; border-radius: 8px; border: none; font-size: 0.88rem; font-weight: 600; cursor: pointer; transition: all .2s; font-family: var(--sans); }
     .btn-p { background: var(--green); color: #fff; }
     .btn-p:hover { background: var(--green-dk); }
@@ -294,54 +196,34 @@
     .btn-sm { padding: 6px 14px; font-size: 0.78rem; }
     .btn-full { width: 100%; text-align: center; }
 
-    /* ── INPUTS ─────────────────────────────────────────── */
-    .inp {
-      width: 100%; background: var(--cream); border: 1.5px solid var(--line);
-      border-radius: 8px; padding: 9px 14px; color: var(--ink);
-      font-family: var(--sans); font-size: 0.88rem; outline: none; margin-bottom: 8px;
-      transition: border-color .2s;
-    }
+    /* ── INPUTS ──────────────────────────────────── */
+    .inp { width: 100%; background: var(--cream); border: 1.5px solid var(--line); border-radius: 8px; padding: 9px 14px; color: var(--ink); font-family: var(--sans); font-size: 0.88rem; outline: none; margin-bottom: 8px; transition: border-color .2s; }
     .inp:focus { border-color: var(--green); background: #fff; }
     .inp::placeholder { color: var(--muted); }
 
-    /* ── CHAT ───────────────────────────────────────────── */
-    .chat-msgs { flex: 1; overflow-y: auto; padding: 16px; background: var(--cream); }
-    .cmsg { margin-bottom: 10px; max-width: 80%; }
+    /* ── CHAT ────────────────────────────────────── */
+    .chat-msgs { flex: 1; overflow-y: auto; padding: 14px 16px; background: var(--cream); }
+    .chat-date-sep { text-align: center; padding: 6px 0; margin: 6px 0; }
+    .chat-date-sep span { background: var(--line); color: var(--muted); font-size: 0.6rem; text-transform: uppercase; letter-spacing: 1px; padding: 3px 14px; border-radius: 20px; }
+    .cmsg { margin-bottom: 8px; max-width: 82%; position: relative; }
     .cmsg.mine { margin-left: auto; }
-    .cbubble {
-      padding: 9px 13px; border-radius: 14px;
-      font-size: 0.88rem; line-height: 1.5;
-    }
-    .cmsg.mine .cbubble {
-      background: var(--green); color: #fff; border-bottom-right-radius: 4px;
-    }
-    .cmsg:not(.mine) .cbubble {
-      background: var(--paper); border: 1px solid var(--line); color: var(--ink);
-      border-bottom-left-radius: 4px; box-shadow: var(--shadow);
-    }
-    .csender { font-size: 0.62rem; color: var(--muted); margin-bottom: 3px; padding: 0 4px; }
-    .ctime   { font-size: 0.6rem; color: rgba(255,255,255,0.7); padding: 2px 4px 0; text-align: right; }
-    .ctime.other { color: var(--muted); }
-    .chat-input-area {
-      padding: 11px 14px; border-top: 1px solid var(--line);
-      display: flex; gap: 8px; background: var(--paper); flex-shrink: 0;
-    }
-    .chat-inp {
-      flex: 1; background: var(--cream); border: 1.5px solid var(--line);
-      border-radius: 22px; padding: 8px 16px; color: var(--ink);
-      font-family: var(--sans); font-size: 0.9rem; outline: none; transition: border-color .2s;
-    }
+    .cbubble { padding: 9px 13px; border-radius: 14px; font-size: 0.88rem; line-height: 1.5; word-break: break-word; }
+    .cmsg.mine .cbubble { background: var(--green); color: #fff; border-bottom-right-radius: 4px; }
+    .cmsg:not(.mine) .cbubble { background: var(--paper); border: 1px solid var(--line); color: var(--ink); border-bottom-left-radius: 4px; box-shadow: var(--shadow); }
+    .csender { font-size: 0.62rem; color: var(--muted); margin-bottom: 3px; padding: 0 4px; font-weight: 600; }
+    .cmeta { font-size: 0.58rem; color: rgba(255,255,255,0.65); padding: 2px 4px 0; text-align: right; }
+    .cmeta.other { color: var(--muted); text-align: left; }
+    .msg-del { font-size: 0.7rem; background: none; border: none; cursor: pointer; color: transparent; padding: 2px 6px; transition: color .2s; line-height: 1; vertical-align: middle; }
+    .cmsg:hover .msg-del { color: var(--muted); }
+    .msg-del:hover { color: var(--grape) !important; }
+    .chat-input-area { padding: 11px 14px; border-top: 1px solid var(--line); display: flex; gap: 8px; background: var(--paper); flex-shrink: 0; }
+    .chat-inp { flex: 1; background: var(--cream); border: 1.5px solid var(--line); border-radius: 22px; padding: 8px 16px; color: var(--ink); font-family: var(--sans); font-size: 0.9rem; outline: none; transition: border-color .2s; }
     .chat-inp:focus { border-color: var(--green); }
     .chat-inp::placeholder { color: var(--muted); }
-    .chat-send {
-      width: 40px; height: 40px; border-radius: 50%;
-      background: var(--green); border: none; color: #fff;
-      font-size: 1rem; cursor: pointer; display: flex; align-items: center; justify-content: center;
-      flex-shrink: 0; transition: background .2s;
-    }
+    .chat-send { width: 40px; height: 40px; border-radius: 50%; background: var(--green); border: none; color: #fff; font-size: 1rem; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: background .2s; }
     .chat-send:hover { background: var(--green-dk); }
 
-    /* ── PERFORMANCE ─────────────────────────────────────── */
+    /* ── PERFORMANCE ─────────────────────────────── */
     .perf-row { display: flex; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--line); gap: 9px; }
     .perf-row:last-child { border-bottom: none; }
     .perf-rank { width: 22px; font-family: var(--serif); font-size: 0.9rem; color: var(--muted); text-align: center; }
@@ -355,63 +237,59 @@
     .pbar.low  { background: var(--grape); }
     .ppct { width: 38px; text-align: right; font-family: var(--serif); font-size: 0.9rem; font-weight: 700; }
 
-    /* ── LBF ────────────────────────────────────────────── */
+    /* ── LBF ─────────────────────────────────────── */
     .lbf-item { display: flex; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); gap: 8px; }
     .lbf-item:last-child { border-bottom: none; }
     .drag-handle { color: var(--muted); cursor: grab; font-size: 1rem; flex-shrink: 0; user-select: none; }
 
-    /* ── MODAL ──────────────────────────────────────────── */
-    .modal-ov {
-      position: fixed; inset: 0; background: rgba(12,46,30,0.75);
-      backdrop-filter: blur(6px); z-index: 100;
-      display: flex; align-items: center; justify-content: center; padding: 20px;
-    }
+    /* ── ADMIN ───────────────────────────────────── */
+    .admin-bar { background: rgba(111,61,146,0.06); border: 1px solid rgba(111,61,146,0.2); border-radius: 8px; padding: 8px 14px; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; font-size: 0.8rem; color: var(--grape); }
+    .padmin-row { display: flex; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--line); gap: 8px; flex-wrap: wrap; }
+    .padmin-row:last-child { border-bottom: none; }
+    .padmin-actions { display: flex; gap: 5px; margin-left: auto; }
+    .padmin-btn { border: 1.5px solid var(--line); background: none; border-radius: 7px; padding: 4px 9px; font-size: 0.72rem; cursor: pointer; font-family: var(--sans); transition: all .2s; }
+    .padmin-btn:hover { border-color: var(--green); color: var(--green); }
+    .padmin-btn.del:hover { border-color: var(--grape); color: var(--grape); }
+
+    /* ── MODAL ───────────────────────────────────── */
+    .modal-ov { position: fixed; inset: 0; background: rgba(12,46,30,0.75); backdrop-filter: blur(6px); z-index: 100; display: flex; align-items: center; justify-content: center; padding: 20px; }
     .modal-ov.hidden { display: none; }
-    .modal-box {
-      background: var(--paper); border: 1px solid var(--line);
-      border-radius: 18px; padding: 28px; width: 100%; max-width: 380px;
-      box-shadow: 0 24px 60px rgba(12,46,30,0.25);
-    }
-    .modal-title {
-      font-family: var(--serif); font-size: 1.5rem; font-weight: 700; font-style: italic;
-      color: var(--green-dk); margin-bottom: 6px; text-align: center;
-    }
+    .modal-box { background: var(--paper); border: 1px solid var(--line); border-radius: 18px; padding: 28px; width: 100%; max-width: 380px; box-shadow: 0 24px 60px rgba(12,46,30,0.25); }
+    .modal-title { font-family: var(--serif); font-size: 1.5rem; font-weight: 700; font-style: italic; color: var(--green-dk); margin-bottom: 6px; text-align: center; }
     .modal-sub { font-size: 0.82rem; color: var(--muted); text-align: center; margin-bottom: 20px; }
 
-    /* ── TOAST ──────────────────────────────────────────── */
-    .toast {
-      position: fixed; bottom: 72px; left: 50%; transform: translateX(-50%);
-      background: var(--green-deep); color: #fff;
-      border-radius: 8px; padding: 9px 18px; font-size: 0.84rem; z-index: 200;
-      animation: su .3s ease; max-width: 300px; text-align: center; pointer-events: none;
-      box-shadow: 0 4px 16px rgba(0,0,0,0.25);
-    }
-    @keyframes su { from { opacity:0; transform:translateX(-50%) translateY(10px); } to { opacity:1; transform:translateX(-50%) translateY(0); } }
+    /* ── PIN ─────────────────────────────────────── */
+    .pin-label { font-size: 0.75rem; color: var(--muted); text-align: center; margin-bottom: 6px; }
+    .pin-input { display: flex; gap: 10px; justify-content: center; margin-bottom: 6px; }
+    .pin-digit { width: 52px; height: 60px; border: 2px solid var(--line); border-radius: 12px; font-size: 1.6rem; text-align: center; background: var(--cream); font-family: var(--serif); font-weight: 700; color: var(--green-dk); outline: none; transition: border-color .2s, background .2s; }
+    .pin-digit:focus { border-color: var(--green); background: #fff; }
+    .auth-error { min-height: 20px; font-size: 0.78rem; color: var(--grape); text-align: center; margin-bottom: 8px; }
 
-    /* ── SPINNER ─────────────────────────────────────────── */
+    /* ── TOAST ───────────────────────────────────── */
+    .toast { position: fixed; bottom: 72px; left: 50%; transform: translateX(-50%); background: var(--green-deep); color: #fff; border-radius: 8px; padding: 9px 18px; font-size: 0.84rem; z-index: 200; animation: su .3s ease; max-width: 300px; text-align: center; pointer-events: none; box-shadow: 0 4px 16px rgba(0,0,0,0.25); }
+    @keyframes su { from { opacity:0; transform:translateX(-50%) translateY(10px); } to { opacity:1; transform:translateX(-50%) translateY(0); } }
     .spin { display: inline-block; width: 22px; height: 22px; border: 2px solid var(--line); border-top-color: var(--green); border-radius: 50%; animation: rot .8s linear infinite; }
     @keyframes rot { to { transform: rotate(360deg); } }
 
-    /* ── EMPTY STATE ─────────────────────────────────────── */
+    /* ── EMPTY ───────────────────────────────────── */
     .empty { text-align: center; padding: 36px 16px; color: var(--muted); }
     .empty .ei { font-size: 2.6rem; margin-bottom: 10px; }
     .empty h3 { font-family: var(--serif); font-size: 1.1rem; color: var(--green-dk); margin-bottom: 6px; }
     .empty p { font-size: 0.85rem; line-height: 1.6; }
 
-    /* ── UTILITY ─────────────────────────────────────────── */
-    .flex   { display: flex; } .flex1  { flex: 1; } .gap8   { gap: 8px; }
-    .mt8    { margin-top: 8px; } .mt14  { margin-top: 14px; }
-    .tgreen { color: var(--green); } .tgrape { color: var(--grape); }
-    .tmuted { color: var(--muted); } .tink   { color: var(--ink); }
+    /* ── UTILS ───────────────────────────────────── */
+    .flex    { display: flex; } .flex1 { flex: 1; } .gap8 { gap: 8px; }
+    .mt8     { margin-top: 8px; } .mt14 { margin-top: 14px; }
+    .tgreen  { color: var(--green); } .tgrape { color: var(--grape); }
+    .tmuted  { color: var(--muted); } .tink   { color: var(--ink); }
     .tcenter { text-align: center; }
-    .tsm    { font-size: 0.82rem; } .txs   { font-size: 0.7rem; }
-    .fbold  { font-weight: 700; } .fserif { font-family: var(--serif); }
-    .hidden { display: none !important; } .w100 { width: 100%; }
-    .italic { font-style: italic; }
+    .tsm     { font-size: 0.82rem; } .txs { font-size: 0.7rem; }
+    .fbold   { font-weight: 700; } .fserif { font-family: var(--serif); }
+    .hidden  { display: none !important; } .w100 { width: 100%; }
+    .italic  { font-style: italic; }
     .separator { height: 1px; background: var(--line); margin: 10px 0; }
   </style>
 </head>
-
 <body>
 
   <!-- STATUS BAR -->
@@ -432,8 +310,8 @@
       <h1>Los Disidentes</h1>
       <span>Quinta B Zona 2 · Liga Country Sur</span>
     </div>
-    <div class="player-badge" onclick="changePlayer()" title="Cambiar nombre">
-      <span id="player-badge-txt">…</span>
+    <div class="player-badge" onclick="showPlayerMenu()" title="Opciones">
+      <span id="player-badge-txt">…</span><span class="admin-crown" id="admin-crown">👑</span>
     </div>
   </header>
 
@@ -463,11 +341,7 @@
   <!-- ════════ PAREJAS ════════ -->
   <section id="tab-parejas" class="tab">
     <div id="parejas-content">
-      <div class="empty">
-        <div class="ei">🎾</div>
-        <h3>Parejas del partido</h3>
-        <p>Las sugerencias aparecen cuando hay 6 o más jugadores confirmados para la fecha.</p>
-      </div>
+      <div class="empty"><div class="ei">🎾</div><h3>Parejas del partido</h3><p>Las sugerencias aparecen cuando hay 6 o más jugadores confirmados.</p></div>
     </div>
   </section>
 
@@ -490,22 +364,32 @@
 
   <!-- ════════ LBF / CONFIG ════════ -->
   <section id="tab-lbf" class="tab">
+
     <div class="card">
       <div class="card-title">📋 Lista de Buena Fe</div>
       <p class="tsm tmuted" style="margin-bottom:12px; line-height:1.5;">
-        El orden determina las canchas. Cada partido los presentes se renumeran del 1 al N (Art. 19). D1 = suma más baja, D3 = suma más alta (Art. 13).
+        El orden determina las canchas. Los presentes se renumeran 1–N cada partido (Art. 19). D1 = suma más baja, D3 = suma más alta (Art. 13).
       </p>
       <div id="lbf-list"></div>
-      <div class="flex gap8 mt8">
-        <input class="inp flex1" id="lbf-new-inp" placeholder="Nombre del jugador" style="margin:0">
+      <!-- Solo visible para admin -->
+      <div class="flex gap8 mt8" id="lbf-add-row" style="display:none;">
+        <input class="inp flex1" id="lbf-new-inp" placeholder="Nombre del jugador" style="margin:0"
+               onkeypress="if(event.key==='Enter') addLBFPlayer()">
         <button class="btn btn-p btn-sm" onclick="addLBFPlayer()">+ Agregar</button>
       </div>
     </div>
 
+    <!-- Panel Admin — solo visible para admin -->
+    <div class="card" id="admin-card" style="display:none;">
+      <div class="card-title">🛡️ Panel de Administración</div>
+      <div class="admin-bar">👑 Sos administrador · Podés gestionar jugadores y moderar el chat</div>
+      <div id="admin-panel"><div class="tcenter tmuted tsm">Cargando…</div></div>
+    </div>
+
     <div class="card">
-      <div class="card-title">🔥 Sincronización Firebase</div>
+      <div class="card-title">🔥 Firebase</div>
       <p class="tsm tmuted" style="margin-bottom:10px; line-height:1.5;">
-        Para que todos los jugadores vean los mismos datos en tiempo real, pegá el URL de tu Realtime Database. Ver <strong>README.md</strong> para instrucciones.
+        Pegá el URL de tu Realtime Database para sincronizar en tiempo real.
       </p>
       <input class="inp" id="fb-url-inp" placeholder="https://tu-proyecto-default-rtdb.firebaseio.com">
       <button class="btn btn-p w100" onclick="saveFirebaseConfig()">Guardar y conectar</button>
@@ -521,41 +405,68 @@
     </div>
   </section>
 
-  <!-- MODAL: NOMBRE -->
+  <!-- ════════ MODAL: LOGIN / REGISTRO ════════ -->
   <div class="modal-ov" id="modal-player">
     <div class="modal-box">
-      <div class="tcenter" style="margin-bottom:18px;">
+      <div class="tcenter" style="margin-bottom:16px;">
         <img src="https://los-disidentes.github.io/logo.png" alt="Los Disidentes"
-             style="width:72px; height:72px; object-fit:contain; margin:0 auto;"
+             style="width:68px; height:68px; object-fit:contain;"
              onerror="this.style.display='none'">
       </div>
-      <div class="modal-title">¡Bienvenido!</div>
-      <div class="modal-sub">¿Cómo te llaman en Los Disidentes?</div>
-      <input class="inp" id="pname-inp" placeholder="Tu nombre" maxlength="30"
-             onkeypress="if(event.key==='Enter') setPlayerName()">
-      <button class="btn btn-p w100" onclick="setPlayerName()">Entrar al equipo 🍇</button>
+      <div class="modal-title">Los Disidentes</div>
+      <div class="modal-sub">Ingresá tu nombre y PIN</div>
+
+      <!-- Nombre -->
+      <input class="inp" id="pname-inp" placeholder="Tu nombre (ej: PABLO)" maxlength="30"
+             list="lbf-names-list" autocomplete="off"
+             style="text-transform:uppercase;"
+             oninput="this.value=this.value.toUpperCase()"
+             onkeypress="if(event.key==='Enter') document.getElementById('pin-0').focus()">
+      <datalist id="lbf-names-list"></datalist>
+
+      <!-- PIN -->
+      <div class="pin-label">PIN de 4 dígitos</div>
+      <div class="pin-input">
+        <input class="pin-digit" id="pin-0" type="password" inputmode="numeric" maxlength="1" pattern="[0-9]" onkeydown="pinKey(0,event)" oninput="pinInput(0,event)">
+        <input class="pin-digit" id="pin-1" type="password" inputmode="numeric" maxlength="1" pattern="[0-9]" onkeydown="pinKey(1,event)" oninput="pinInput(1,event)">
+        <input class="pin-digit" id="pin-2" type="password" inputmode="numeric" maxlength="1" pattern="[0-9]" onkeydown="pinKey(2,event)" oninput="pinInput(2,event)">
+        <input class="pin-digit" id="pin-3" type="password" inputmode="numeric" maxlength="1" pattern="[0-9]" onkeydown="pinKey(3,event)" oninput="pinInput(3,event)">
+      </div>
+      <div class="auth-error" id="auth-error"></div>
+
+      <button class="btn btn-p w100" id="auth-btn" onclick="tryLogin()">Entrar al equipo 🎾</button>
+      <p class="txs tmuted tcenter mt8" style="line-height:1.5;">
+        ¿Primera vez? Ingresá tu nombre y elegí un PIN de 4 dígitos.<br>
+        Próximas veces usá el mismo PIN para identificarte.
+      </p>
     </div>
   </div>
 
-  <!-- ════════════════════════════════════════════════════════
+  <!-- ════════════════════════════════════════════
        APP SCRIPT
-  ════════════════════════════════════════════════════════ -->
+  ════════════════════════════════════════════ -->
   <script>
 
-  // ═══════════════════════════════════════════════
-  // CONFIG & STATE
-  // ═══════════════════════════════════════════════
+  // ═══════════════════════════════════════════
+  // CONFIG
+  // ═══════════════════════════════════════════
   const CFG = {
-    campId:       parseInt(localStorage.getItem('campId') || '2155'),
-    teamKeywords: ['disidentes', 'miralagos los'],
-    corsProxy:    'https://api.allorigins.win/raw?url=',
-    ligaBase:     'https://www.ligacountrysur.com.ar',
-    lockDays:     4,
-    fbKey:        'fbDbUrl',
+    campId:         parseInt(localStorage.getItem('campId') || '2155'),
+    teamKeywords:   ['disidentes', 'miralagos los'],
+    corsProxy:      'https://api.allorigins.win/raw?url=',
+    ligaBase:       'https://www.ligacountrysur.com.ar',
+    lockDays:       4,
+    fbKey:          'fbDbUrl',
+    bootstrapAdmin: 'PABLO',   // ← nombre del admin principal (en mayúsculas)
   };
 
+  // ═══════════════════════════════════════════
+  // STATE
+  // ═══════════════════════════════════════════
   const ST = {
     player:       localStorage.getItem('playerName') || null,
+    playerPin:    localStorage.getItem('playerPin')  || null,
+    isAdmin:      false,
     activeTab:    'fixture',
     fixture:      JSON.parse(localStorage.getItem('fixture')   || '[]'),
     standings:    JSON.parse(localStorage.getItem('standings') || '[]'),
@@ -571,16 +482,15 @@
     perfLoaded:   false,
   };
 
-  // ═══════════════════════════════════════════════
-  // STATUS
-  // ═══════════════════════════════════════════════
+  // ═══════════════════════════════════════════
+  // STATUS / TOAST
+  // ═══════════════════════════════════════════
   function setStatus(ok, txt) {
     ST.fbOK = ok;
     const dot = document.getElementById('sdot');
     dot.className = 'sdot ' + (ok ? 'on' : 'off');
     document.getElementById('stext').textContent = txt;
   }
-
   function toast(msg, ms = 2600) {
     document.querySelectorAll('.toast').forEach(e => e.remove());
     const el = document.createElement('div');
@@ -589,40 +499,257 @@
     setTimeout(() => el.remove(), ms);
   }
 
-  // ═══════════════════════════════════════════════
+  // ═══════════════════════════════════════════
+  // AUTH — PIN Login / Registro
+  // ═══════════════════════════════════════════
+  function pinInput(i, e) {
+    const val = e.target.value.replace(/\D/g,'');
+    e.target.value = val ? val[val.length-1] : '';
+    if (e.target.value && i < 3) document.getElementById(`pin-${i+1}`).focus();
+    if (i === 3 && e.target.value) tryLogin();
+  }
+  function pinKey(i, e) {
+    if (e.key === 'Backspace' && !e.target.value && i > 0) {
+      document.getElementById(`pin-${i-1}`).focus();
+    }
+  }
+  function getPin() {
+    return [0,1,2,3].map(i => document.getElementById(`pin-${i}`)?.value || '').join('');
+  }
+  function clearPinFields() {
+    [0,1,2,3].forEach(i => { const el = document.getElementById(`pin-${i}`); if(el) el.value=''; });
+  }
+
+  async function tryLogin() {
+    const name  = document.getElementById('pname-inp').value.trim().toUpperCase();
+    const pin   = getPin();
+    const errEl = document.getElementById('auth-error');
+    const btn   = document.getElementById('auth-btn');
+
+    if (!name || name.length < 2) { errEl.textContent = '⚠️ Ingresá tu nombre'; return; }
+    if (pin.length !== 4)          { errEl.textContent = '⚠️ PIN debe ser 4 dígitos'; document.getElementById('pin-0').focus(); return; }
+
+    errEl.textContent = '';
+    btn.textContent = 'Verificando…'; btn.disabled = true;
+
+    if (ST.fbDb) {
+      try {
+        const snap = await ST.fbDb.ref(`players/${fbKey(name)}`).once('value');
+        const existing = snap.val();
+
+        if (existing) {
+          // Jugador registrado → verificar PIN
+          if (existing.pin !== pin) {
+            errEl.textContent = '❌ PIN incorrecto. Intentá de nuevo.';
+            clearPinFields(); document.getElementById('pin-0').focus();
+            btn.textContent = 'Entrar al equipo 🎾'; btn.disabled = false;
+            return;
+          }
+          // PIN correcto → actualizar lastLogin
+          ST.fbDb.ref(`players/${fbKey(name)}/lastLogin`).set(Date.now());
+        } else {
+          // Jugador nuevo → registrar
+          await ST.fbDb.ref(`players/${fbKey(name)}`).set({
+            name, pin, createdAt: Date.now(), lastLogin: Date.now()
+          });
+          // Si no hay ningún admin todavía, este jugador se convierte en admin
+          const admSnap = await ST.fbDb.ref('config/admins').once('value');
+          if (!admSnap.val() || Object.keys(admSnap.val()).length === 0) {
+            await ST.fbDb.ref(`config/admins/${fbKey(name)}`).set(true);
+          }
+          toast(`✅ ¡Registrado como ${name}!`);
+        }
+      } catch(e) {
+        // Firebase error: si localStorage coincide, dejar pasar; si no, denegar
+        if (ST.player !== name || ST.playerPin !== pin) {
+          errEl.textContent = '⚠️ Sin conexión. Reintentá cuando haya internet.';
+          btn.textContent = 'Entrar al equipo 🎾'; btn.disabled = false;
+          return;
+        }
+      }
+    } else {
+      // Sin Firebase: confiar en localStorage (solo si ya tiene sesión guardada)
+      if (ST.player && ST.playerPin) {
+        if (ST.player !== name || ST.playerPin !== pin) {
+          errEl.textContent = '❌ PIN incorrecto o sin conexión para registrarse.';
+          btn.textContent = 'Entrar al equipo 🎾'; btn.disabled = false;
+          clearPinFields();
+          return;
+        }
+      }
+      // Primera vez sin Firebase: guardar localmente y seguir
+    }
+
+    btn.textContent = 'Entrar al equipo 🎾'; btn.disabled = false;
+    completeLogin(name, pin);
+  }
+
+  function completeLogin(name, pin) {
+    ST.player    = name;
+    ST.playerPin = pin;
+    localStorage.setItem('playerName', name);
+    localStorage.setItem('playerPin',  pin);
+    document.getElementById('player-badge-txt').textContent = name;
+    document.getElementById('modal-player').classList.add('hidden');
+    checkAdmin();
+    updateAttBadge();
+    updateLBFDatalist();
+  }
+
+  // ═══════════════════════════════════════════
+  // ADMIN
+  // ═══════════════════════════════════════════
+  function checkAdmin() {
+    // Bootstrap: el nombre configurado en CFG siempre es admin
+    if (ST.player === CFG.bootstrapAdmin) {
+      ST.isAdmin = true;
+      applyAdminUI();
+      return;
+    }
+    // Verificar en Firebase
+    if (ST.fbDb && ST.player) {
+      ST.fbDb.ref(`config/admins/${fbKey(ST.player)}`).once('value').then(s => {
+        ST.isAdmin = !!s.val();
+        applyAdminUI();
+      });
+    }
+  }
+
+  function applyAdminUI() {
+    const crown    = document.getElementById('admin-crown');
+    const addRow   = document.getElementById('lbf-add-row');
+    const adminCard= document.getElementById('admin-card');
+    if (crown)     crown.style.display     = ST.isAdmin ? 'inline' : 'none';
+    if (addRow)    addRow.style.display    = ST.isAdmin ? 'flex'   : 'none';
+    if (adminCard) adminCard.style.display = ST.isAdmin ? 'block'  : 'none';
+    if (ST.activeTab === 'lbf')  { renderLBF(); if(ST.isAdmin) renderAdmin(); }
+    if (ST.activeTab === 'chat') renderChat();
+  }
+
+  async function renderAdmin() {
+    const wrap = document.getElementById('admin-panel');
+    if (!wrap || !ST.isAdmin) return;
+    wrap.innerHTML = '<div class="tcenter tmuted tsm" style="padding:10px;"><span class="spin"></span></div>';
+
+    if (!ST.fbDb) {
+      wrap.innerHTML = '<div class="txs tmuted">Conectá Firebase para ver los jugadores registrados.</div>';
+      return;
+    }
+
+    const [playersSnap, adminsSnap] = await Promise.all([
+      ST.fbDb.ref('players').once('value'),
+      ST.fbDb.ref('config/admins').once('value'),
+    ]);
+    const players = playersSnap.val() || {};
+    const admins  = adminsSnap.val()  || {};
+    const entries = Object.entries(players).sort((a,b) => a[1].name.localeCompare(b[1].name));
+
+    if (!entries.length) {
+      wrap.innerHTML = '<div class="txs tmuted tcenter">Sin jugadores registrados aún.</div>';
+      return;
+    }
+
+    wrap.innerHTML = `
+      <div class="txs tmuted" style="margin-bottom:10px;">${entries.length} jugadores registrados</div>
+      ${entries.map(([key, p]) => {
+        const isAdm = !!admins[key];
+        const date  = p.lastLogin ? new Date(p.lastLogin).toLocaleDateString('es-AR',{day:'numeric',month:'short'}) : '—';
+        return `<div class="padmin-row">
+          <div>
+            <div class="tsm fbold">${p.name} ${isAdm ? '👑' : ''}</div>
+            <div class="txs tmuted">Último acceso: ${date}</div>
+          </div>
+          <div class="padmin-actions">
+            <button class="padmin-btn" onclick="adminResetPin('${p.name}')" title="Resetear PIN">🔑 PIN</button>
+            ${!isAdm
+              ? `<button class="padmin-btn" onclick="adminToggleAdmin('${p.name}','${key}',true)" title="Hacer admin">👑</button>`
+              : `<button class="padmin-btn" onclick="adminToggleAdmin('${p.name}','${key}',false)" title="Quitar admin">−👑</button>`}
+            <button class="padmin-btn del" onclick="adminRemovePlayer('${p.name}','${key}')" title="Eliminar registro">🗑</button>
+          </div>
+        </div>`;
+      }).join('')}
+      <div class="separator"></div>
+      <button class="btn btn-o btn-full btn-sm" onclick="renderAdmin()">🔄 Actualizar lista</button>
+    `;
+  }
+
+  async function adminResetPin(name) {
+    const newPin = prompt(`Nuevo PIN para ${name} (4 dígitos):`);
+    if (!newPin || !/^\d{4}$/.test(newPin)) { toast('❌ PIN inválido — debe ser exactamente 4 dígitos'); return; }
+    await ST.fbDb.ref(`players/${fbKey(name)}/pin`).set(newPin);
+    toast(`✅ PIN de ${name} actualizado`);
+  }
+
+  async function adminRemovePlayer(name, key) {
+    if (!confirm(`¿Eliminar el registro de ${name}?\nPodrán volver a registrarse con un nuevo PIN.`)) return;
+    await ST.fbDb.ref(`players/${key}`).remove();
+    await ST.fbDb.ref(`config/admins/${key}`).remove();
+    toast(`✅ Registro de ${name} eliminado`);
+    renderAdmin();
+  }
+
+  async function adminToggleAdmin(name, key, makeAdmin) {
+    if (makeAdmin) {
+      await ST.fbDb.ref(`config/admins/${key}`).set(true);
+      toast(`👑 ${name} es ahora administrador`);
+    } else {
+      if (name === CFG.bootstrapAdmin) { toast('⚠️ No podés quitar los permisos del admin principal'); return; }
+      await ST.fbDb.ref(`config/admins/${key}`).remove();
+      toast(`✅ ${name} ya no es administrador`);
+    }
+    renderAdmin();
+  }
+
+  async function deleteMessage(msgId) {
+    if (!ST.isAdmin || !ST.fbDb) return;
+    if (!confirm('¿Eliminar este mensaje?')) return;
+    await ST.fbDb.ref(`chat/${msgId}`).remove();
+    toast('🗑 Mensaje eliminado');
+  }
+
+  // ═══════════════════════════════════════════
+  // PLAYER MENU (badge)
+  // ═══════════════════════════════════════════
+  function showPlayerMenu() {
+    const opts = ['Cambiar sesión (cerrar sesión)'];
+    const sel = window.confirm(`👤 ${ST.player}${ST.isAdmin?' 👑':''}\n\n¿Cerrar sesión?`);
+    if (sel) logout();
+  }
+  function logout() {
+    localStorage.removeItem('playerName');
+    localStorage.removeItem('playerPin');
+    location.reload();
+  }
+
+  // ═══════════════════════════════════════════
   // FIREBASE
-  // ═══════════════════════════════════════════════
+  // ═══════════════════════════════════════════
   function initFirebase() {
     const url = localStorage.getItem(CFG.fbKey);
     document.getElementById('fb-url-inp').value = url || '';
     if (!url) { setStatus(false, 'Sin Firebase — datos locales'); return; }
-
     try {
       let app;
-      try { app = firebase.app(); } catch(_) {
-        app = firebase.initializeApp({ databaseURL: url });
-      }
+      try { app = firebase.app(); } catch(_) { app = firebase.initializeApp({ databaseURL: url }); }
       ST.fbDb = firebase.database();
-
       ST.fbDb.ref('.info/connected').on('value', s => {
         const ok = s.val() === true;
-        setStatus(ok, ok ? 'Sincronizado 🍇' : 'Reconectando…');
+        setStatus(ok, ok ? '🍇 Conectado' : 'Reconectando…');
+        if (ok && ST.player) checkAdmin();
       });
-
       ST.fbDb.ref('lbf').on('value', s => {
         const d = s.val();
         if (d && Array.isArray(d)) {
           ST.lbf = d;
           localStorage.setItem('lbf', JSON.stringify(d));
+          updateLBFDatalist();
           if (ST.activeTab === 'lbf')        renderLBF();
           if (ST.activeTab === 'asistencia') renderAtt();
           if (ST.activeTab === 'parejas')    renderParejas();
         }
       });
-
       const nm = nextMatch();
       if (nm) watchAttendance(nm.id);
-
       ST.fbDb.ref('chat').limitToLast(120).on('value', s => {
         const d = s.val();
         if (!d) return;
@@ -637,17 +764,14 @@
         }
         if (ST.activeTab === 'chat') renderChat();
       });
-
       if (nm) {
         ST.fbDb.ref(`formation/${nm.id}`).on('value', s => {
           ST.formation = s.val();
           if (ST.activeTab === 'parejas') renderParejas();
         });
       }
-
-      document.getElementById('fb-url-inp').value = url;
     } catch(e) {
-      setStatus(false, 'Error: ' + e.message.slice(0,35));
+      setStatus(false, 'Error Firebase: ' + e.message.slice(0,30));
     }
   }
 
@@ -672,15 +796,14 @@
   function saveCampId() {
     const v = parseInt(document.getElementById('camp-id-inp').value);
     if (!v) return;
-    localStorage.setItem('campId', v);
-    CFG.campId = v;
+    localStorage.setItem('campId', v); CFG.campId = v;
     toast('✅ Campeonato actualizado');
     setTimeout(() => location.reload(), 900);
   }
 
-  // ═══════════════════════════════════════════════
+  // ═══════════════════════════════════════════
   // LIGA API
-  // ═══════════════════════════════════════════════
+  // ═══════════════════════════════════════════
   async function apiGet(path) {
     const url = CFG.ligaBase + path;
     try {
@@ -702,26 +825,20 @@
   async function loadFixture() {
     const data = await apiGet(`/api/fixture_mod.php?NroCampeonato=${CFG.campId}`);
     if (!data) { if (ST.fixture.length) renderFixture(); return; }
-
     const matches = [];
     data.forEach(fecha => {
       (fecha.partidos || []).forEach(p => {
         if (!isMyTeam(p.Local) && !isMyTeam(p.Visitante)) return;
         matches.push({
-          id:     p.NroPartidoCampeonato,
-          rueda:  parseInt(p.RuedaPartido) || 0,
-          fecha:  p.FechaPartido,
-          hora:   p.HoraPartido || '',
-          local:  p.Local,
-          visitor:p.Visitante,
-          gL:     parseInt(p.GolesLocal)     || 0,
-          gV:     parseInt(p.GolesVisitante) || 0,
-          played: p.Jugado === '1' || p.Jugado === 1,
-          home:   isMyTeam(p.Local),
+          id: p.NroPartidoCampeonato, rueda: parseInt(p.RuedaPartido)||0,
+          fecha: p.FechaPartido, hora: p.HoraPartido||'',
+          local: p.Local, visitor: p.Visitante,
+          gL: parseInt(p.GolesLocal)||0, gV: parseInt(p.GolesVisitante)||0,
+          played: p.Jugado==='1'||p.Jugado===1, home: isMyTeam(p.Local),
         });
       });
     });
-    ST.fixture = matches.sort((a,b) => new Date(a.fecha) - new Date(b.fecha));
+    ST.fixture = matches.sort((a,b) => new Date(a.fecha)-new Date(b.fecha));
     localStorage.setItem('fixture', JSON.stringify(ST.fixture));
     renderFixture();
     if (ST.fbDb) { const nm = nextMatch(); if (nm) watchAttendance(nm.id); }
@@ -739,7 +856,6 @@
     const played = ST.fixture.filter(m => m.played);
     if (!played.length) { ST.perfLoaded = true; renderRend(); return; }
     const stats = {};
-
     for (const match of played) {
       const data = await apiGet(`/resultadopartidotenis_visita.php?NroPartidoCampeonato=${match.id}`);
       if (!data || !Array.isArray(data)) continue;
@@ -747,7 +863,7 @@
         const eq1isUs = isMyTeam(c.equipo1);
         const p1 = eq1isUs ? san(c.nombre1) : san(c.nombre3);
         const p2 = eq1isUs ? san(c.nombre2) : san(c.nombre4);
-        const court = parseInt((c.tipoPartido||'Doble 1').replace(/\D/g,'')) || 1;
+        const court = parseInt((c.tipoPartido||'Doble 1').replace(/\D/g,''))||1;
         const s = [[parseInt(c.set1)||0,parseInt(c.set1_2)||0],[parseInt(c.set2)||0,parseInt(c.set2_2)||0],[parseInt(c.set3)||0,parseInt(c.set3_2)||0]];
         let ours=0,theirs=0;
         s.forEach(([a,b]) => { if(a>b) ours++; else if(b>a) theirs++; });
@@ -763,22 +879,20 @@
         }
       }
     }
-
-    ST.perfs = Object.entries(stats).map(([name,s])=>({
+    ST.perfs = Object.entries(stats).map(([name,s]) => ({
       name, W:s.W, L:s.L, total:s.W+s.L,
       pct: s.W+s.L>0 ? Math.round(s.W/(s.W+s.L)*100) : 0,
       cW:s.cW, cL:s.cL, pairs:s.pairs,
-    })).sort((a,b)=>b.pct-a.pct||b.total-a.total);
-
+    })).sort((a,b) => b.pct-a.pct||b.total-a.total);
     ST.perfLoaded = true;
     renderRend();
   }
 
   function san(n) { return (n||'').trim().toUpperCase(); }
 
-  // ═══════════════════════════════════════════════
+  // ═══════════════════════════════════════════
   // PAIRS ENGINE — Art. 13 + Art. 19
-  // ═══════════════════════════════════════════════
+  // ═══════════════════════════════════════════
   function getAllPairings(players) {
     if (players.length < 6) return [];
     const p6=[...players.slice(0,6)], res=[], [a,...rest]=p6;
@@ -786,7 +900,7 @@
       const pair1=[a,rest[i]], rem=rest.filter((_,j)=>j!==i);
       for(let j=0;j<rem.length-1;j++)
         for(let k=j+1;k<rem.length;k++){
-          const pair2=[rem[j],rem[k]],pair3=rem.filter((_,x)=>x!==j&&x!==k);
+          const pair2=[rem[j],rem[k]], pair3=rem.filter((_,x)=>x!==j&&x!==k);
           res.push([pair1,pair2,pair3]);
         }
     }
@@ -800,23 +914,14 @@
     return { d1:sorted[0].pair, d1s:sorted[0].sum, d2:sorted[1].pair, d2s:sorted[1].sum, d3:sorted[2].pair, d3s:sorted[2].sum };
   }
 
-  function pairPerf(n1,n2) {
-    const p=ST.perfs.find(x=>x.name===n1);
-    if(!p||!p.pairs[n2]) return 0;
-    const pr=p.pairs[n2], tot=pr.W+pr.L;
-    return tot>0 ? pr.W/tot : 0;
-  }
-
-  function playerPct(name) { const p=ST.perfs.find(x=>x.name===name); return p?p.pct:50; }
+  function pairPerf(n1,n2) { const p=ST.perfs.find(x=>x.name===n1); if(!p||!p.pairs[n2]) return 0; const pr=p.pairs[n2],tot=pr.W+pr.L; return tot>0?pr.W/tot:0; }
+  function playerPct(name)  { const p=ST.perfs.find(x=>x.name===name); return p?p.pct:50; }
 
   function suggestFormations(confirmed, count=5) {
     if (confirmed.length<6) return [];
     const formations = getAllPairings(confirmed).map(pairing => {
       const courts = assignCourts(pairing);
       let perf=0;
-      for(const [pair] of [[courts.d1],[courts.d2],[courts.d3]]){
-        const [p1,p2]=[courts.d1,courts.d2,courts.d3][[[courts.d1],[courts.d2],[courts.d3]].indexOf([pair])];
-      }
       [[courts.d1],[courts.d2],[courts.d3]].forEach(([pair],ci)=>{
         const p=[courts.d1,courts.d2,courts.d3][ci];
         perf += pairPerf(p[0].name,p[1].name);
@@ -834,15 +939,11 @@
     const pr=p.pairs[n2]; return {W:pr.W,L:pr.L,tot:pr.W+pr.L};
   }
 
-  // ═══════════════════════════════════════════════
+  // ═══════════════════════════════════════════
   // HELPERS
-  // ═══════════════════════════════════════════════
-  function nextMatch() {
-    const t=new Date(); t.setHours(0,0,0,0);
-    const up=ST.fixture.filter(m=>!m.played&&new Date(m.fecha)>=t);
-    return up.length?up[0]:null;
-  }
-  function isLocked(m) { return m ? (new Date(m.fecha)-new Date())/86400000<=CFG.lockDays : false; }
+  // ═══════════════════════════════════════════
+  function nextMatch() { const t=new Date();t.setHours(0,0,0,0);const up=ST.fixture.filter(m=>!m.played&&new Date(m.fecha)>=t);return up.length?up[0]:null; }
+  function isLocked(m) { return m?(new Date(m.fecha)-new Date())/86400000<=CFG.lockDays:false; }
   function daysUntil(s) { const d=new Date(s);d.setHours(0,0,0,0);const t=new Date();t.setHours(0,0,0,0);return Math.round((d-t)/86400000); }
   function fmtDate(s) {
     const d=new Date(s);
@@ -850,16 +951,27 @@
     const months=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
     return `${days[d.getDay()]} ${d.getDate()} ${months[d.getMonth()]}`;
   }
+  function fmtDateTime(ts) {
+    const d=new Date(ts);
+    return `${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}`;
+  }
+  function fmtDateFull(ts) {
+    const d=new Date(ts);
+    const days=['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+    const months=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+    return `${days[d.getDay()]} ${d.getDate()} ${months[d.getMonth()]}`;
+  }
   function rival(m) { return m?(m.home?m.visitor:m.local):''; }
-  function fbKey(n) { return (n||'').replace(/[.#$\[\]\/]/g,'_'); }
+  function fbKey(n)  { return (n||'').replace(/[.#$\[\]\/]/g,'_'); }
+  function esc(s)    { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
-  // ═══════════════════════════════════════════════
+  // ═══════════════════════════════════════════
   // RENDER: FIXTURE
-  // ═══════════════════════════════════════════════
+  // ═══════════════════════════════════════════
   function renderFixture() {
     const nm=nextMatch(), wrap=document.getElementById('next-match-wrap');
     if (!nm) {
-      wrap.innerHTML='<div class="empty"><div class="ei">🏆</div><h3>Torneo finalizado</h3><p>Sin próximas fechas programadas.</p></div>';
+      wrap.innerHTML='<div class="empty"><div class="ei">🏆</div><h3>Torneo finalizado</h3><p>Sin próximas fechas.</p></div>';
     } else {
       const days=daysUntil(nm.fecha), locked=isLocked(nm);
       wrap.innerHTML=`
@@ -868,19 +980,15 @@
           <div class="match-vs">Los Disidentes</div>
           <div class="tmuted txs italic" style="margin-bottom:4px;">vs</div>
           <div class="match-rival">${rival(nm)}</div>
-          <div class="match-meta">
-            <span>📅 ${fmtDate(nm.fecha)}</span>
-            ${nm.hora?`<span>🕐 ${nm.hora}</span>`:''}
-          </div>
+          <div class="match-meta"><span>📅 ${fmtDate(nm.fecha)}</span>${nm.hora?`<span>🕐 ${nm.hora}</span>`:''}</div>
           <div class="countdown-big">${days<=0?(days===0?'¡HOY!':'—'):days}</div>
           ${days>0?'<div class="countdown-sub">días para el partido</div>':''}
           <div style="margin-top:18px;">
             ${locked
               ?'<div class="lock-banner" style="justify-content:center;">🔒 Asistencia cerrada · Ver Parejas</div>'
-              :`<button class="btn btn-p w100" style="background:rgba(255,255,255,0.15); border:1.5px solid rgba(255,255,255,0.35); color:#fff;" onclick="switchTab('asistencia')">Confirmar asistencia →</button>`}
+              :`<button class="btn btn-p w100" style="background:rgba(255,255,255,0.15);border:1.5px solid rgba(255,255,255,0.35);color:#fff;" onclick="switchTab('asistencia')">Confirmar asistencia →</button>`}
           </div>
         </div>
-
         <div class="slabel">PRÓXIMAS FECHAS</div>
         ${ST.fixture.filter(m=>!m.played).slice(1,5).map(m=>`
           <div class="card" style="padding:12px 16px;">
@@ -893,17 +1001,14 @@
           </div>`).join('')}
       `;
     }
-
     const played=ST.fixture.filter(m=>m.played).slice(-4).reverse();
     const rw=document.getElementById('results-wrap');
     if(played.length){
       rw.innerHTML='<div class="slabel">ÚLTIMOS RESULTADOS</div>'+played.map(m=>{
-        const myG=m.home?m.gL:m.gV, thG=m.home?m.gV:m.gL, won=myG>thG;
+        const myG=m.home?m.gL:m.gV,thG=m.home?m.gV:m.gL,won=myG>thG;
         return `<div class="card" style="padding:12px 16px;">
           <div class="flex" style="align-items:center;gap:10px;">
-            <div style="min-width:48px;text-align:center;">
-              <span class="txs tmuted" style="text-transform:uppercase;letter-spacing:.5px;display:block;">${fmtDate(m.fecha).split(' ').slice(1).join(' ')}</span>
-            </div>
+            <div style="min-width:48px;text-align:center;"><span class="txs tmuted" style="text-transform:uppercase;letter-spacing:.5px;display:block;">${fmtDate(m.fecha).split(' ').slice(1).join(' ')}</span></div>
             <span class="flex1 tsm">vs ${rival(m)} <span class="tmuted txs">(F${m.rueda}${m.home?', L':', V'})</span></span>
             <span class="result-chip ${won?'win':'loss'}">${myG}–${thG}</span>
           </div>
@@ -921,28 +1026,27 @@
         <thead><tr><th>#</th><th>Equipo</th><th>Pts</th><th>G</th><th>P</th><th>Dif</th></tr></thead>
         <tbody>${ST.standings.map(t=>{
           const me=isMyTeam(t.Equipo||t.equipo||'');
-          const eq=t.Equipo||t.equipo||'', pts=t.Puntos||t.puntos||0;
-          const g=t.Ganados||t.ganados||0, p=t.Perdidos||t.perdidos||0;
-          const dif=t.diferencia??t.Diferencia??0, pos=t.Posicion||t.posicion||'';
+          const eq=t.Equipo||t.equipo||'',pts=t.Puntos||t.puntos||0;
+          const g=t.Ganados||t.ganados||0,p=t.Perdidos||t.perdidos||0;
+          const dif=t.diferencia??t.Diferencia??0,pos=t.Posicion||t.posicion||'';
           return `<tr class="${me?'me':''}"><td>${pos}</td><td>${eq}</td><td><strong>${pts}</strong></td><td>${g}</td><td>${p}</td><td>${dif>0?'+':''}${dif}</td></tr>`;
         }).join('')}</tbody>
       </table>`;
   }
 
-  // ═══════════════════════════════════════════════
+  // ═══════════════════════════════════════════
   // RENDER: ATTENDANCE
-  // ═══════════════════════════════════════════════
+  // ═══════════════════════════════════════════
   function renderAtt() {
-    const wrap=document.getElementById('att-content'), nm=nextMatch();
+    const wrap=document.getElementById('att-content'),nm=nextMatch();
     if(!nm){wrap.innerHTML='<div class="empty"><div class="ei">📅</div><h3>Sin partidos</h3><p>No hay fechas próximas.</p></div>';return;}
-    const locked=isLocked(nm), days=daysUntil(nm.fecha);
+    const locked=isLocked(nm),days=daysUntil(nm.fecha);
     const confNames=Object.entries(ST.attendance).filter(([,v])=>v.status==='confirmed').map(([k])=>k);
     const decNames =Object.entries(ST.attendance).filter(([,v])=>v.status==='declined').map(([k])=>k);
     const active=ST.lbf.filter(p=>p.active);
     const pending=active.filter(p=>!confNames.includes(p.name)&&!decNames.includes(p.name));
     const myStatus=ST.attendance[ST.player]?.status;
     const amInLBF=active.some(p=>p.name===ST.player);
-
     wrap.innerHTML=`
       <div class="card" style="margin-bottom:12px;">
         <div class="flex" style="justify-content:space-between;align-items:center;">
@@ -953,13 +1057,11 @@
           <span class="chip ${locked?'cr':'cx'}">${locked?'🔒 Cerrado':`Cierra en ${Math.max(0,days-CFG.lockDays)}d`}</span>
         </div>
       </div>
-
       <div class="att-stats">
         <div class="att-stat g"><div class="att-stat-n">${confNames.length}</div><div class="att-stat-l">Confirmados</div></div>
         <div class="att-stat r"><div class="att-stat-n">${decNames.length}</div><div class="att-stat-l">No van</div></div>
         <div class="att-stat x"><div class="att-stat-n">${pending.length}</div><div class="att-stat-l">Pendientes</div></div>
       </div>
-
       ${!locked&&amInLBF?`
         <div class="card" style="margin-bottom:12px;">
           <div class="card-title" style="margin-bottom:10px;">Tu confirmación</div>
@@ -967,10 +1069,8 @@
             <button class="abtn confirm ${myStatus==='confirmed'?'active':''}" onclick="setAtt('confirmed')">✓ Voy</button>
             <button class="abtn decline ${myStatus==='declined'?'active':''}"  onclick="setAtt('declined')">✗ No puedo</button>
           </div>
-        </div>` : ''}
-
-      ${locked?'<div class="lock-banner">🔒 La asistencia está cerrada. La formación está en la pestaña Parejas.</div>':''}
-
+        </div>`:''}
+      ${locked?'<div class="lock-banner">🔒 Asistencia cerrada. Ver Parejas para la formación.</div>':''}
       <div class="card">
         <div class="card-title">Lista del equipo</div>
         ${!active.length
@@ -984,16 +1084,14 @@
                 ${st==='confirmed'?'✓ Va':st==='declined'?'✗ No':'?'}
               </span>
             </div>`;
-          }).join('')
-        }
-      </div>
-    `;
+          }).join('')}
+      </div>`;
   }
 
   async function setAtt(status) {
     const nm=nextMatch();
     if(!nm||isLocked(nm)){toast('🔒 La asistencia está cerrada');return;}
-    if(!ST.player){toast('Primero ingresá tu nombre');return;}
+    if(!ST.player){toast('Iniciá sesión para confirmar');return;}
     const data={status,ts:Date.now(),player:ST.player};
     if(ST.fbDb) await ST.fbDb.ref(`attendance/${nm.id}/${fbKey(ST.player)}`).set(data);
     else{ST.attendance[ST.player]=data;renderAtt();}
@@ -1010,16 +1108,14 @@
     else badge.classList.add('hidden');
   }
 
-  // ═══════════════════════════════════════════════
+  // ═══════════════════════════════════════════
   // RENDER: PAREJAS
-  // ═══════════════════════════════════════════════
+  // ═══════════════════════════════════════════
   function renderParejas() {
-    const wrap=document.getElementById('parejas-content'), nm=nextMatch();
+    const wrap=document.getElementById('parejas-content'),nm=nextMatch();
     if(!nm){wrap.innerHTML='<div class="empty"><div class="ei">📅</div><h3>Sin partidos</h3></div>';return;}
-
     const confNames=Object.entries(ST.attendance).filter(([,v])=>v.status==='confirmed').map(([k])=>k);
     const confirmed=ST.lbf.filter(p=>p.active&&confNames.includes(p.name)).map((p,i)=>({name:p.name,lbfPos:p.lbfPosition||(i+1),mn:i+1}));
-
     if(ST.formation?.locked){
       const f=ST.formation;
       wrap.innerHTML=`
@@ -1032,45 +1128,36 @@
               <div class="csum">Σ${f[c+'s']}</div>
             </div>`).join('')}
           <div class="txs tmuted mt8">Confirmada por ${f.lockedBy||'—'}</div>
-          <button class="btn btn-d btn-sm w100 mt8" onclick="unlockFormation()">Desbloquear formación</button>
+          ${ST.isAdmin?`<button class="btn btn-d btn-sm w100 mt8" onclick="unlockFormation()">Desbloquear formación</button>`:''}
         </div>`;
       return;
     }
-
     if(confirmed.length<6){
       wrap.innerHTML=`
         <div class="card">
           <div class="card-title">🎾 Parejas · F${nm.rueda} vs ${rival(nm)}</div>
           <div class="empty" style="padding:20px 0;">
-            <div class="ei">⏳</div>
-            <h3>Esperando confirmaciones</h3>
-            <p>Se necesitan 6 jugadores confirmados.<br>
-            <strong class="tgreen fserif" style="font-size:1.2rem;">${confirmed.length}/6</strong> confirmados</p>
+            <div class="ei">⏳</div><h3>Esperando confirmaciones</h3>
+            <p>Se necesitan 6 jugadores confirmados.<br><strong class="tgreen fserif" style="font-size:1.2rem;">${confirmed.length}/6</strong></p>
           </div>
         </div>
-        <div class="card">
-          <div class="card-title">Confirmados hasta ahora</div>
-          ${confirmed.map(p=>`<div class="prow"><div class="pnum">${p.mn}</div><div class="pname flex1">${p.name}</div><span class="chip cg">✓</span></div>`).join('')}
-        </div>`;
+        <div class="card"><div class="card-title">Confirmados</div>${confirmed.map(p=>`<div class="prow"><div class="pnum">${p.mn}</div><div class="pname flex1">${p.name}</div><span class="chip cg">✓</span></div>`).join('')}</div>`;
       return;
     }
-
     const formations=suggestFormations(confirmed,5);
     wrap.innerHTML=`
       <div class="card">
         <div class="card-title">✅ Confirmados F${nm.rueda} (${confirmed.length})</div>
         <div class="txs tmuted" style="margin-bottom:8px;">Renumerados 1–${confirmed.length} por LBF (Art. 19)</div>
         ${confirmed.map(p=>`<div class="prow"><div class="pnum">${p.mn}</div><div class="pname flex1">${p.name}</div></div>`).join('')}
-        ${confirmed.length>6?`<div class="txs tgrape mt8">⚠️ ${confirmed.length} confirmados — el capitán elige los 6 que juegan.</div>`:''}
+        ${confirmed.length>6?`<div class="txs tgrape mt8">⚠️ ${confirmed.length} confirmados — el capitán elige 6.</div>`:''}
       </div>
       <div class="slabel">FORMACIONES SUGERIDAS · ART. 13 + HISTORIAL</div>
       ${formations.map((f,idx)=>`
         <div class="fcard ${idx===0?'best':''}">
-          <div class="${idx===0?'txs tgreen fbold':'txs tmuted'}" style="margin-bottom:8px;">
-            ${idx===0?'⭐ RECOMENDADA':`Opción ${idx+1}`}
-          </div>
+          <div class="${idx===0?'txs tgreen fbold':'txs tmuted'}" style="margin-bottom:8px;">${idx===0?'⭐ RECOMENDADA':`Opción ${idx+1}`}</div>
           ${['d1','d2','d3'].map(c=>{
-            const pair=f[c], sum=f[c+'s'], h=getPairHist(pair[0].name,pair[1].name);
+            const pair=f[c],sum=f[c+'s'],h=getPairHist(pair[0].name,pair[1].name);
             return `<div class="crow">
               <div class="clabel ${c}">${c.toUpperCase()}</div>
               <div class="cplayers flex1">
@@ -1080,20 +1167,19 @@
               <div class="csum">Σ${sum}</div>
             </div>`;
           }).join('')}
-          <button class="btn ${idx===0?'btn-p':'btn-o btn-sm'} w100 mt8"
-                  onclick="lockFormation(${idx})">
+          <button class="btn ${idx===0?'btn-p':'btn-o btn-sm'} w100 mt8" onclick="lockFormation(${idx})">
             ${idx===0?'🔒 Confirmar esta formación':'Usar esta'}
           </button>
         </div>`).join('')}
       <div class="card mt14">
-        <div class="card-title txs tmuted" style="font-family:var(--sans);font-size:.65rem;text-transform:uppercase;letter-spacing:1px;">📋 Reglamento aplicado</div>
-        <p class="txs tmuted" style="line-height:1.5;">Art. 19: Se renumeran los presentes 1–N por orden de LBF. · Art. 13: D1 = suma más baja, D3 = suma más alta. Empate: D1 tiene el número más bajo.</p>
+        <div class="card-title txs tmuted" style="font-family:var(--sans);font-size:.65rem;text-transform:uppercase;letter-spacing:1px;">📋 Reglamento</div>
+        <p class="txs tmuted" style="line-height:1.5;">Art. 19: Se renumeran los presentes 1–N por orden de LBF. Art. 13: D1 = suma más baja, D3 = suma más alta. Empate: D1 tiene el número más bajo.</p>
       </div>
     `;
-    wrap._formations=formations;
+    wrap._formations = formations;
   }
 
-  async function lockFormation(idx){
+  async function lockFormation(idx) {
     const nm=nextMatch(); if(!nm) return;
     const wrap=document.getElementById('parejas-content');
     const f=wrap._formations?.[idx]; if(!f) return;
@@ -1101,64 +1187,97 @@
       d1:f.d1.map(p=>({name:p.name})),d1s:f.d1s,
       d2:f.d2.map(p=>({name:p.name})),d2s:f.d2s,
       d3:f.d3.map(p=>({name:p.name})),d3s:f.d3s,
-      locked:true,lockedBy:ST.player,lockedAt:Date.now()
+      locked:true, lockedBy:ST.player, lockedAt:Date.now()
     };
     if(ST.fbDb) await ST.fbDb.ref(`formation/${nm.id}`).set(data);
     else{ST.formation=data;renderParejas();}
     toast('🔒 ¡Formación confirmada! Jugamos juntos 🎾');
   }
 
-  async function unlockFormation(){
+  async function unlockFormation() {
     const nm=nextMatch(); if(!nm) return;
     if(ST.fbDb) await ST.fbDb.ref(`formation/${nm.id}/locked`).set(false);
     else{if(ST.formation) ST.formation.locked=false; renderParejas();}
   }
 
-  // ═══════════════════════════════════════════════
-  // RENDER: CHAT
-  // ═══════════════════════════════════════════════
-  function renderChat(){
+  // ═══════════════════════════════════════════
+  // RENDER: CHAT — con autor, fecha y hora
+  // ═══════════════════════════════════════════
+  function renderChat() {
     const wrap=document.getElementById('chat-msgs');
-    if(!ST.chat.length){wrap.innerHTML='<div class="empty"><div class="ei">💬</div><h3>El chat está vacío</h3><p>¡Rompé el hielo!</p></div>';return;}
-    const atBottom=wrap.scrollHeight-wrap.scrollTop<=wrap.clientHeight+60;
-    wrap.innerHTML=ST.chat.map(msg=>{
-      const mine=msg.player===ST.player;
-      const d=new Date(msg.ts), time=`${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}`;
-      return `<div class="cmsg ${mine?'mine':''}">
-        ${!mine?`<div class="csender">${msg.player} · ${time}</div>`:''}
-        <div class="cbubble">${esc(msg.text)}</div>
-        ${mine?`<div class="ctime">${time}</div>`:`<div class="ctime other">${time}</div>`}
-      </div>`;
-    }).join('');
-    if(atBottom) wrap.scrollTop=wrap.scrollHeight;
-    const last=ST.chat[ST.chat.length-1];
-    if(last){ST.lastChatSeen=last.ts;localStorage.setItem('lastChatSeen',last.ts);}
-    ST.unreadChat=0; document.getElementById('badge-chat').classList.add('hidden');
-  }
-
-  function esc(s){return(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
-
-  async function sendChat(){
-    const inp=document.getElementById('chat-inp'), text=inp.value.trim();
-    if(!text) return;
-    if(!ST.player){toast('Primero ingresá tu nombre');return;}
-    inp.value='';
-    const msg={player:ST.player,text,ts:Date.now()};
-    if(ST.fbDb) await ST.fbDb.ref('chat').push(msg);
-    else{ST.chat.push({id:String(Date.now()),...msg});renderChat();}
-  }
-
-  // ═══════════════════════════════════════════════
-  // RENDER: RENDIMIENTOS
-  // ═══════════════════════════════════════════════
-  function renderRend(){
-    const wrap=document.getElementById('rend-content');
-    if(!ST.perfLoaded){
-      wrap.innerHTML='<div class="tcenter" style="padding:28px"><span class="spin"></span><div class="txs tmuted mt8">Analizando partidos…</div></div>';
-      loadPerformances(); return;
+    if(!ST.chat.length){
+      wrap.innerHTML='<div class="empty"><div class="ei">💬</div><h3>El chat está vacío</h3><p>¡Rompé el hielo!</p></div>';
+      return;
     }
-    if(!ST.perfs.length){wrap.innerHTML='<div class="empty"><div class="ei">📊</div><h3>Sin datos aún</h3><p>Los stats aparecen cuando se carguen los resultados del torneo.</p></div>';return;}
-    const pc=p=>p>=70?'var(--green)':p>=50?'var(--lime)':'var(--grape)';
+    const atBottom = wrap.scrollHeight - wrap.scrollTop <= wrap.clientHeight + 60;
+    let lastDateStr = '';
+    wrap.innerHTML = ST.chat.map(msg => {
+      const mine = msg.player === ST.player;
+      const d    = new Date(msg.ts);
+      const time = fmtDateTime(msg.ts);
+      const today = new Date();
+      const isToday = d.toDateString() === today.toDateString();
+      const isYesterday = d.toDateString() === new Date(today-86400000).toDateString();
+      const dateLbl = isToday ? 'Hoy' : isYesterday ? 'Ayer' : fmtDateFull(msg.ts);
+      const dateKey = d.toDateString();
+
+      let sep = '';
+      if (dateKey !== lastDateStr) {
+        sep = `<div class="chat-date-sep"><span>${dateLbl}</span></div>`;
+        lastDateStr = dateKey;
+      }
+
+      const delBtn = ST.isAdmin && ST.fbDb
+        ? `<button class="msg-del" onclick="deleteMessage('${msg.id}')" title="Eliminar mensaje">🗑</button>`
+        : '';
+
+      if (mine) {
+        return `${sep}
+          <div class="cmsg mine">
+            <div style="display:flex;align-items:flex-end;gap:4px;justify-content:flex-end;">
+              ${delBtn}
+              <div class="cbubble">${esc(msg.text)}</div>
+            </div>
+            <div class="cmeta">${time}</div>
+          </div>`;
+      } else {
+        return `${sep}
+          <div class="cmsg">
+            <div class="csender">${esc(msg.player)}</div>
+            <div style="display:flex;align-items:flex-end;gap:4px;">
+              <div class="cbubble">${esc(msg.text)}</div>
+              ${delBtn}
+            </div>
+            <div class="cmeta other">${time}</div>
+          </div>`;
+      }
+    }).join('');
+
+    if (atBottom) wrap.scrollTop = wrap.scrollHeight;
+    const last = ST.chat[ST.chat.length-1];
+    if (last) { ST.lastChatSeen = last.ts; localStorage.setItem('lastChatSeen', last.ts); }
+    ST.unreadChat = 0;
+    document.getElementById('badge-chat').classList.add('hidden');
+  }
+
+  async function sendChat() {
+    const inp=document.getElementById('chat-inp'), text=inp.value.trim();
+    if (!text) return;
+    if (!ST.player) { toast('Iniciá sesión para chatear'); return; }
+    inp.value = '';
+    const msg = { player: ST.player, text, ts: Date.now() };
+    if (ST.fbDb) await ST.fbDb.ref('chat').push(msg);
+    else { ST.chat.push({id: String(Date.now()), ...msg}); renderChat(); }
+  }
+
+  // ═══════════════════════════════════════════
+  // RENDER: RENDIMIENTOS
+  // ═══════════════════════════════════════════
+  function renderRend() {
+    const wrap=document.getElementById('rend-content');
+    if(!ST.perfLoaded){ wrap.innerHTML='<div class="tcenter" style="padding:28px"><span class="spin"></span><div class="txs tmuted mt8">Analizando partidos…</div></div>'; loadPerformances(); return; }
+    if(!ST.perfs.length){ wrap.innerHTML='<div class="empty"><div class="ei">📊</div><h3>Sin datos aún</h3><p>Los stats aparecen cuando se carguen los resultados.</p></div>'; return; }
+    const pc =p=>p>=70?'var(--green)':p>=50?'var(--lime)':'var(--grape)';
     const pcl=p=>p>=70?'high':p>=50?'mid':'low';
     wrap.innerHTML=`
       <div class="card">
@@ -1188,31 +1307,42 @@
           if(!best) return '';
           return `<div class="perf-row"><div class="perf-name flex1 tsm">${p.name} + ${best.n}</div><div class="ppct" style="color:${pc(best.pct)}">${best.pct}%</div></div>`;
         }).filter(Boolean).join('')}
-      </div>
-    `;
+      </div>`;
   }
 
-  // ═══════════════════════════════════════════════
+  // ═══════════════════════════════════════════
   // RENDER: LBF
-  // ═══════════════════════════════════════════════
-  function renderLBF(){
-    const wrap=document.getElementById('lbf-list');
-    if(!ST.lbf.length){wrap.innerHTML='<div class="tmuted tsm tcenter" style="padding:10px;">Lista vacía.</div>';return;}
-    wrap.innerHTML=ST.lbf.map((p,i)=>`
-      <div class="lbf-item" data-idx="${i}" draggable="true"
-           ondragstart="lbfDS(event,${i})" ondragover="lbfDO(event)"
-           ondrop="lbfDrop(event,${i})" ondragend="lbfDE()">
-        <span class="drag-handle">⠿</span>
-        <div class="pnum">${i+1}</div>
-        <div class="pname flex1">${p.name}</div>
-        <label style="cursor:pointer;display:flex;align-items:center;gap:5px;" class="txs tmuted">
-          <input type="checkbox" ${p.active?'checked':''} onchange="toggleLBF(${i})" style="cursor:pointer;">
-          Activo
-        </label>
-        <button onclick="removeLBF(${i})"
-          style="border:none;background:none;color:var(--muted);cursor:pointer;font-size:1.1rem;padding:0 4px;line-height:1;transition:color .2s;"
-          onmouseover="this.style.color='var(--grape)'" onmouseout="this.style.color='var(--muted)'">×</button>
-      </div>`).join('');
+  // ═══════════════════════════════════════════
+  function renderLBF() {
+    const wrap = document.getElementById('lbf-list');
+    if (!ST.lbf.length) { wrap.innerHTML = '<div class="tmuted tsm tcenter" style="padding:10px;">Lista vacía — el admin debe agregar jugadores.</div>'; return; }
+
+    if (ST.isAdmin) {
+      // Admin: editable con drag & drop
+      wrap.innerHTML = ST.lbf.map((p,i) => `
+        <div class="lbf-item" data-idx="${i}" draggable="true"
+             ondragstart="lbfDS(event,${i})" ondragover="lbfDO(event)"
+             ondrop="lbfDrop(event,${i})" ondragend="lbfDE()">
+          <span class="drag-handle">⠿</span>
+          <div class="pnum">${i+1}</div>
+          <div class="pname flex1">${p.name}</div>
+          <label style="cursor:pointer;display:flex;align-items:center;gap:5px;" class="txs tmuted">
+            <input type="checkbox" ${p.active?'checked':''} onchange="toggleLBF(${i})" style="cursor:pointer;">
+            Activo
+          </label>
+          <button onclick="removeLBF(${i})"
+            style="border:none;background:none;color:var(--muted);cursor:pointer;font-size:1.1rem;padding:0 4px;line-height:1;transition:color .2s;"
+            onmouseover="this.style.color='var(--grape)'" onmouseout="this.style.color='var(--muted)'">×</button>
+        </div>`).join('');
+    } else {
+      // No-admin: solo lectura
+      wrap.innerHTML = ST.lbf.map((p,i) => `
+        <div class="lbf-item">
+          <div class="pnum">${i+1}</div>
+          <div class="pname flex1">${p.name}</div>
+          <span class="chip ${p.active?'cg':'cx'} txs">${p.active?'Activo':'Inactivo'}</span>
+        </div>`).join('');
+    }
   }
 
   let _di=null;
@@ -1221,77 +1351,77 @@
   function lbfDE(){_di=null;}
   function lbfDrop(e,to){
     e.preventDefault(); if(_di===null||_di===to) return;
+    if(!ST.isAdmin){toast('Solo el admin puede reordenar');return;}
     const arr=[...ST.lbf],[moved]=arr.splice(_di,1);
     arr.splice(to,0,moved); arr.forEach((p,i)=>p.lbfPosition=i+1);
     ST.lbf=arr; saveLBF(); renderLBF();
   }
-  function toggleLBF(i){ST.lbf[i].active=!ST.lbf[i].active;saveLBF();}
-  function removeLBF(i){if(!confirm(`Eliminar a ${ST.lbf[i].name}?`))return;ST.lbf.splice(i,1);ST.lbf.forEach((p,x)=>p.lbfPosition=x+1);saveLBF();renderLBF();}
+  function toggleLBF(i){if(!ST.isAdmin){toast('Solo el admin puede modificar la LBF');return;}ST.lbf[i].active=!ST.lbf[i].active;saveLBF();}
+  function removeLBF(i){
+    if(!ST.isAdmin){toast('Solo el admin puede eliminar jugadores');return;}
+    if(!confirm(`Eliminar a ${ST.lbf[i].name} de la LBF?`)) return;
+    ST.lbf.splice(i,1); ST.lbf.forEach((p,x)=>p.lbfPosition=x+1);
+    saveLBF(); renderLBF();
+  }
   function addLBFPlayer(){
+    if(!ST.isAdmin){toast('Solo el admin puede agregar jugadores');return;}
     const inp=document.getElementById('lbf-new-inp'), name=inp.value.trim().toUpperCase();
-    if(!name) return;
+    if(!name){return;}
     if(ST.lbf.find(p=>p.name.toUpperCase()===name)){toast('⚠️ Ya está en la lista');return;}
     ST.lbf.push({name,active:true,lbfPosition:ST.lbf.length+1});
-    inp.value=''; saveLBF(); renderLBF();
+    inp.value=''; saveLBF(); renderLBF(); updateLBFDatalist();
   }
   function saveLBF(){localStorage.setItem('lbf',JSON.stringify(ST.lbf));if(ST.fbDb)ST.fbDb.ref('lbf').set(ST.lbf);}
 
-  // ═══════════════════════════════════════════════
+  function updateLBFDatalist(){
+    const dl=document.getElementById('lbf-names-list');
+    if(dl) dl.innerHTML=ST.lbf.map(p=>`<option value="${p.name}">`).join('');
+  }
+
+  // ═══════════════════════════════════════════
   // NAVIGATION
-  // ═══════════════════════════════════════════════
-  function switchTab(tab){
-    ST.activeTab=tab;
-    document.querySelectorAll('.tab').forEach(el=>el.classList.remove('active'));
-    document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+  // ═══════════════════════════════════════════
+  function switchTab(tab) {
+    ST.activeTab = tab;
+    document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
     document.getElementById(`tab-${tab}`).classList.add('active');
     document.querySelector(`[data-tab="${tab}"]`).classList.add('active');
-    if(tab==='asistencia') renderAtt();
-    if(tab==='parejas') renderParejas();
-    if(tab==='rendimientos'&&!ST.perfLoaded) renderRend();
-    if(tab==='lbf') renderLBF();
-    if(tab==='chat'){
+    if (tab==='asistencia')                            renderAtt();
+    if (tab==='parejas')                               renderParejas();
+    if (tab==='rendimientos' && !ST.perfLoaded)        renderRend();
+    if (tab==='lbf') { renderLBF(); if(ST.isAdmin && ST.fbDb) renderAdmin(); }
+    if (tab==='chat') {
       renderChat();
       document.getElementById('badge-chat').classList.add('hidden');
-      ST.unreadChat=0;
-      setTimeout(()=>{const m=document.getElementById('chat-msgs');m.scrollTop=m.scrollHeight;},50);
+      ST.unreadChat = 0;
+      setTimeout(() => { const m=document.getElementById('chat-msgs'); m.scrollTop=m.scrollHeight; }, 50);
     }
   }
 
-  // ═══════════════════════════════════════════════
-  // PLAYER NAME
-  // ═══════════════════════════════════════════════
-  function setPlayerName(){
-    const inp=document.getElementById('pname-inp'), n=inp.value.trim().toUpperCase();
-    if(!n||n.length<2){toast('Mínimo 2 caracteres');return;}
-    ST.player=n; localStorage.setItem('playerName',n);
-    document.getElementById('player-badge-txt').textContent=n;
-    document.getElementById('modal-player').classList.add('hidden');
-    updateAttBadge();
-  }
-  function changePlayer(){
-    const n=prompt('Cambiar nombre:',ST.player||'');
-    if(n&&n.trim().length>=2){
-      ST.player=n.trim().toUpperCase();
-      localStorage.setItem('playerName',ST.player);
-      document.getElementById('player-badge-txt').textContent=ST.player;
-      toast(`✅ Sos ${ST.player}`);
-    }
-  }
-
-  // ═══════════════════════════════════════════════
+  // ═══════════════════════════════════════════
   // INIT
-  // ═══════════════════════════════════════════════
-  async function init(){
-    if(ST.player){
-      document.getElementById('player-badge-txt').textContent=ST.player;
+  // ═══════════════════════════════════════════
+  async function init() {
+    // Auto-login si hay sesión guardada
+    if (ST.player && ST.playerPin) {
+      document.getElementById('player-badge-txt').textContent = ST.player;
       document.getElementById('modal-player').classList.add('hidden');
     }
-    document.getElementById('camp-id-inp').value=CFG.campId;
-    if(ST.fixture.length) renderFixture();
-    if(ST.standings.length) renderStandings();
+
+    document.getElementById('camp-id-inp').value = CFG.campId;
+    if (ST.fixture.length)   renderFixture();
+    if (ST.standings.length) renderStandings();
+
     initFirebase();
-    await Promise.all([loadFixture(),loadStandings()]);
-    updateAttBadge(); renderLBF();
+
+    await Promise.all([loadFixture(), loadStandings()]);
+    updateAttBadge();
+    renderLBF();
+    updateLBFDatalist();
+
+    // Verificar admin si ya tenemos sesión y Firebase
+    if (ST.player && ST.fbDb) checkAdmin();
   }
 
   document.addEventListener('DOMContentLoaded', init);
