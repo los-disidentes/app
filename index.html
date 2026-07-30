@@ -283,6 +283,37 @@
       font-size: 0.76rem; cursor: pointer; font-family: var(--sans); font-weight: 600;
     }
 
+    /* ── INSTALL BANNER ─────────────────────────── */
+    #install-bar {
+      background: linear-gradient(135deg, var(--green-dk), var(--green));
+      color: #fff; padding: 11px 16px;
+      display: flex; align-items: center; gap: 12px; flex-shrink: 0;
+      animation: su .4s ease;
+    }
+    #install-bar .ib-icon { font-size: 1.4rem; flex-shrink: 0; }
+    #install-bar .ib-text { flex: 1; font-size: 0.78rem; line-height: 1.4; }
+    #install-bar .ib-text strong { display: block; font-size: 0.84rem; margin-bottom: 1px; }
+    #install-bar .ib-btn {
+      background: #fff; color: var(--green-dk);
+      border: none; border-radius: 20px; padding: 7px 16px;
+      font-size: 0.8rem; font-weight: 700; cursor: pointer;
+      font-family: var(--sans); flex-shrink: 0; white-space: nowrap;
+    }
+    #install-bar .ib-close {
+      background: none; border: none; color: rgba(255,255,255,0.6);
+      font-size: 1.1rem; cursor: pointer; padding: 0 2px; flex-shrink: 0;
+    }
+    /* Modal iOS */
+    #ios-modal .modal-box { text-align: center; max-width: 360px; }
+    .modal-hdr { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    .modal-hdr span { font-family: var(--serif); font-size: 1.1rem; font-weight: 700; font-style: italic; color: var(--green-dk); }
+    .modal-x { background: none; border: none; font-size: 1.2rem; color: var(--muted); cursor: pointer; padding: 0 2px; line-height: 1; }
+    .ios-step { display: flex; align-items: flex-start; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); text-align: left; }
+    .ios-step:last-child { border-bottom: none; }
+    .ios-step .step-icon { font-size: 1.6rem; flex-shrink: 0; width: 36px; text-align: center; }
+    .ios-step .step-txt { flex: 1; font-size: 0.84rem; color: var(--ink); line-height: 1.5; }
+    .ios-step .step-txt strong { color: var(--green-dk); display: block; margin-bottom: 2px; }
+
     /* ── TOAST ───────────────────────────────────── */
     .toast { position: fixed; bottom: 72px; left: 50%; transform: translateX(-50%); background: var(--green-deep); color: #fff; border-radius: 8px; padding: 9px 18px; font-size: 0.84rem; z-index: 200; animation: su .3s ease; max-width: 300px; text-align: center; pointer-events: none; box-shadow: 0 4px 16px rgba(0,0,0,0.25); }
     @keyframes su { from { opacity:0; transform:translateX(-50%) translateY(10px); } to { opacity:1; transform:translateX(-50%) translateY(0); } }
@@ -321,6 +352,42 @@
   <div id="update-banner" class="hidden" onclick="applyUpdate()">
     ✨ Nueva versión disponible
     <button class="upd-btn">Actualizar ahora</button>
+  </div>
+
+  <!-- BANNER INSTALAR APP -->
+  <div id="install-bar" style="display:none;">
+    <span class="ib-icon">📲</span>
+    <div class="ib-text">
+      <strong>Instalá la app</strong>
+      Accedé rápido desde tu celular
+    </div>
+    <button class="ib-btn" onclick="installApp()">Instalar</button>
+    <button class="ib-close" onclick="dismissInstall()" title="Cerrar">✕</button>
+  </div>
+
+  <!-- MODAL INSTRUCCIONES iOS -->
+  <div id="ios-modal" class="modal-ov hidden">
+    <div class="modal-box" style="max-width:360px;">
+      <div class="modal-hdr">
+        <span>Instalar en iPhone / iPad</span>
+        <button class="modal-x" onclick="document.getElementById('ios-modal').classList.add('hidden')">✕</button>
+      </div>
+      <div style="padding:12px 0 4px;">
+        <div class="ios-step">
+          <span class="step-icon">⬆️</span>
+          <div class="step-txt"><strong>1. Tocá Compartir</strong>El botón cuadrado con flecha en la barra del navegador (abajo en iPhone, arriba en iPad)</div>
+        </div>
+        <div class="ios-step">
+          <span class="step-icon">➕</span>
+          <div class="step-txt"><strong>2. "Agregar a inicio"</strong>Deslizá el menú y tocá <em>"Agregar a pantalla de inicio"</em></div>
+        </div>
+        <div class="ios-step">
+          <span class="step-icon">✅</span>
+          <div class="step-txt"><strong>3. Confirmar</strong>Tocá <em>"Agregar"</em> arriba a la derecha. ¡Listo!</div>
+        </div>
+      </div>
+      <button class="btn btn-p btn-full" style="margin-top:8px;" onclick="document.getElementById('ios-modal').classList.add('hidden')">Entendido</button>
+    </div>
   </div>
 
   <!-- HEADER -->
@@ -1622,6 +1689,67 @@
   }
 
   document.addEventListener('DOMContentLoaded', init);
+
+  // ═══════════════════════════════════════════
+  // INSTALL BANNER — PWA
+  // ═══════════════════════════════════════════
+  let _installPrompt = null;
+
+  function isIOS() {
+    return /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+  }
+  function isStandalone() {
+    return window.matchMedia('(display-mode: standalone)').matches
+      || window.navigator.standalone === true;
+  }
+
+  function showInstallBar() {
+    if (isStandalone()) return; // ya está instalada
+    if (localStorage.getItem('installDismissed') === '1') return;
+    document.getElementById('install-bar').style.display = 'flex';
+  }
+
+  function installApp() {
+    if (isIOS()) {
+      document.getElementById('ios-modal').classList.remove('hidden');
+      return;
+    }
+    if (_installPrompt) {
+      _installPrompt.prompt();
+      _installPrompt.userChoice.then(r => {
+        if (r.outcome === 'accepted') hideInstallBar();
+        _installPrompt = null;
+      });
+    }
+  }
+
+  function dismissInstall() {
+    localStorage.setItem('installDismissed', '1');
+    hideInstallBar();
+  }
+
+  function hideInstallBar() {
+    document.getElementById('install-bar').style.display = 'none';
+  }
+
+  // Android/Chrome: capturar el evento para mostrarlo cuando queramos
+  window.addEventListener('beforeinstallprompt', e => {
+    e.preventDefault();
+    _installPrompt = e;
+    showInstallBar();
+  });
+
+  // Ocultar si se instala exitosamente
+  window.addEventListener('appinstalled', () => {
+    hideInstallBar();
+    _installPrompt = null;
+    showToast('✅ ¡App instalada! Ya la tenés en tu pantalla de inicio.', 3500);
+  });
+
+  // iOS: mostrar banner de todos modos (no hay beforeinstallprompt en Safari)
+  if (isIOS() && !isStandalone()) {
+    window.addEventListener('load', () => setTimeout(showInstallBar, 1500));
+  }
 
   // ═══════════════════════════════════════════
   // SERVICE WORKER — PWA + DETECCIÓN DE UPDATES
