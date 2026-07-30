@@ -1004,11 +1004,11 @@
   async function apiGet(path) {
     const url = CFG.ligaBase + path;
     try {
-      const r = await fetch(CFG.corsProxy + encodeURIComponent(url), { signal: AbortSignal.timeout(9000) });
+      const r = await fetch(CFG.corsProxy + encodeURIComponent(url), { signal: AbortSignal.timeout(6000) });
       return JSON.parse(await r.text());
     } catch(_) {}
     try {
-      const r = await fetch(url, { signal: AbortSignal.timeout(5000) });
+      const r = await fetch(url, { signal: AbortSignal.timeout(4000) });
       return await r.json();
     } catch(e) { console.warn('API off:', path); return null; }
   }
@@ -1053,8 +1053,12 @@
     const played = ST.fixture.filter(m => m.played);
     if (!played.length) { ST.perfLoaded = true; renderRend(); return; }
     const stats = {};
-    for (const match of played) {
-      const data = await apiGet(`/resultadopartidotenis_visita.php?NroPartidoCampeonato=${match.id}`);
+    // Fetch todos los partidos en paralelo para no esperar secuencialmente
+    const results = await Promise.allSettled(
+      played.map(m => apiGet(`/resultadopartidotenis_visita.php?NroPartidoCampeonato=${m.id}`))
+    );
+    for (let i = 0; i < played.length; i++) {
+      const data = results[i].status === 'fulfilled' ? results[i].value : null;
       if (!data || !Array.isArray(data)) continue;
       for (const c of data) {
         const eq1isUs = isMyTeam(c.equipo1);
@@ -1472,7 +1476,7 @@
   // ═══════════════════════════════════════════
   function renderRend() {
     const wrap=document.getElementById('rend-content');
-    if(!ST.perfLoaded){ wrap.innerHTML='<div class="tcenter" style="padding:28px"><span class="spin"></span><div class="txs tmuted mt8">Analizando partidos…</div></div>'; loadPerformances(); return; }
+    if(!ST.perfLoaded){ wrap.innerHTML='<div class="tcenter" style="padding:28px"><span class="spin"></span><div class="txs tmuted mt8">Consultando Liga Country Sur…</div><div class="txs tmuted" style="margin-top:4px;font-size:0.7rem;">Puede tardar hasta 15 seg</div></div>'; loadPerformances(); return; }
     if(!ST.perfs.length){ wrap.innerHTML='<div class="empty"><div class="ei">📊</div><h3>Sin datos aún</h3><p>Los stats aparecen cuando se carguen los resultados.</p></div>'; return; }
     const pc =p=>p>=70?'var(--green)':p>=50?'var(--lime)':'var(--grape)';
     const pcl=p=>p>=70?'high':p>=50?'mid':'low';
