@@ -372,15 +372,53 @@
 
     <div class="card">
       <div class="card-title">📋 Lista de Buena Fe</div>
+
+      <!-- Estado: abierta (editable) -->
+      <div id="lbf-open-banner" style="display:none;">
+        <div style="background:rgba(174,191,63,0.12);border:1px solid rgba(174,191,63,0.4);border-radius:8px;padding:9px 14px;margin-bottom:10px;font-size:0.78rem;color:#6b7a0a;line-height:1.5;">
+          ✏️ <strong>Modo edición</strong> — Cargá los jugadores en el orden oficial de la LBF.<br>
+          Una vez cerrada, el orden queda fijo para todo el torneo (no se puede modificar).<br>
+          Solo podés activar/desactivar jugadores por partido.
+        </div>
+      </div>
+
+      <!-- Estado: cerrada (bloqueada) -->
+      <div id="lbf-locked-banner" style="display:none;">
+        <div style="background:rgba(28,91,58,0.08);border:1px solid rgba(28,91,58,0.25);border-radius:8px;padding:9px 14px;margin-bottom:10px;font-size:0.78rem;color:var(--green);line-height:1.5;">
+          🔒 <strong>LBF cerrada</strong> — El orden está fijo para el torneo (Art. 13/19).<br>
+          Activá o desactivá jugadores según quién juega cada partido.
+        </div>
+      </div>
+
       <p class="tsm tmuted" style="margin-bottom:12px; line-height:1.5;">
-        El orden determina las canchas. Los presentes se renumeran 1–N cada partido (Art. 19). D1 = suma más baja, D3 = suma más alta (Art. 13).
+        Los presentes se renumeran 1–N por orden de LBF (Art. 19). D1 = suma más baja, D3 = suma más alta (Art. 13).
       </p>
       <div id="lbf-list"></div>
-      <!-- Solo visible para admin -->
+
+      <!-- Solo visible para admin, solo si NO está bloqueada -->
       <div class="flex gap8 mt8" id="lbf-add-row" style="display:none;">
         <input class="inp flex1" id="lbf-new-inp" placeholder="Nombre del jugador" style="margin:0"
                onkeypress="if(event.key==='Enter') addLBFPlayer()">
         <button class="btn btn-p btn-sm" onclick="addLBFPlayer()">+ Agregar</button>
+      </div>
+
+      <!-- Botón cerrar LBF — solo admin, solo si está abierta y hay jugadores -->
+      <div id="lbf-lock-row" style="display:none; margin-top:12px;">
+        <div style="height:1px;background:var(--line);margin-bottom:12px;"></div>
+        <button class="btn w100" onclick="lockLBF()"
+          style="background:var(--green-dk);color:#fff;font-size:0.85rem;">
+          🔒 Cerrar LBF del torneo
+        </button>
+        <p class="txs tmuted tcenter mt8" style="line-height:1.5;">
+          ⚠️ Esta acción es permanente. El orden no se podrá cambiar.
+        </p>
+      </div>
+
+      <!-- Botón desbloquear — solo superadmin, emergencias -->
+      <div id="lbf-unlock-row" style="display:none; margin-top:10px;">
+        <button class="btn btn-d btn-sm w100" onclick="unlockLBF()">
+          🔓 Desbloquear LBF (emergencia)
+        </button>
       </div>
     </div>
 
@@ -476,6 +514,7 @@
     fixture:      JSON.parse(localStorage.getItem('fixture')   || '[]'),
     standings:    JSON.parse(localStorage.getItem('standings') || '[]'),
     lbf:          JSON.parse(localStorage.getItem('lbf')       || '[]'),
+    lbfLocked:    localStorage.getItem('lbfLocked') === 'true',
     attendance:   {},
     chat:         [],
     perfs:        [],
@@ -752,6 +791,11 @@
           if (ST.activeTab === 'asistencia') renderAtt();
           if (ST.activeTab === 'parejas')    renderParejas();
         }
+      });
+      ST.fbDb.ref('config/lbfLocked').on('value', s => {
+        ST.lbfLocked = !!s.val();
+        localStorage.setItem('lbfLocked', ST.lbfLocked);
+        if (ST.activeTab === 'lbf') renderLBF();
       });
       const nm = nextMatch();
       if (nm) watchAttendance(nm.id);
@@ -1319,11 +1363,34 @@
   // RENDER: LBF
   // ═══════════════════════════════════════════
   function renderLBF() {
-    const wrap = document.getElementById('lbf-list');
-    if (!ST.lbf.length) { wrap.innerHTML = '<div class="tmuted tsm tcenter" style="padding:10px;">Lista vacía — el admin debe agregar jugadores.</div>'; return; }
+    const wrap      = document.getElementById('lbf-list');
+    const addRow    = document.getElementById('lbf-add-row');
+    const lockRow   = document.getElementById('lbf-lock-row');
+    const unlockRow = document.getElementById('lbf-unlock-row');
+    const openBanner   = document.getElementById('lbf-open-banner');
+    const lockedBanner = document.getElementById('lbf-locked-banner');
 
-    if (ST.isAdmin) {
-      // Admin: editable con drag & drop
+    const locked  = ST.lbfLocked;
+    const isAdmin = ST.isAdmin;
+
+    // Banners
+    if (openBanner)   openBanner.style.display   = (isAdmin && !locked) ? 'block' : 'none';
+    if (lockedBanner) lockedBanner.style.display = locked ? 'block' : 'none';
+
+    // Botón agregar: solo admin + lista abierta
+    if (addRow)  addRow.style.display  = (isAdmin && !locked) ? 'flex'  : 'none';
+    // Botón cerrar LBF: solo admin + lista abierta + hay jugadores
+    if (lockRow) lockRow.style.display = (isAdmin && !locked && ST.lbf.length > 0) ? 'block' : 'none';
+    // Botón desbloquear emergencia: solo bootstrap admin
+    if (unlockRow) unlockRow.style.display = (ST.player === CFG.bootstrapAdmin && locked) ? 'block' : 'none';
+
+    if (!ST.lbf.length) {
+      wrap.innerHTML = '<div class="tmuted tsm tcenter" style="padding:10px;">Lista vacía — el admin debe agregar jugadores en el orden oficial de la LBF.</div>';
+      return;
+    }
+
+    if (isAdmin && !locked) {
+      // Admin con lista abierta: editable (drag & drop + eliminar)
       wrap.innerHTML = ST.lbf.map((p,i) => `
         <div class="lbf-item" data-idx="${i}" draggable="true"
              ondragstart="lbfDS(event,${i})" ondragover="lbfDO(event)"
@@ -1339,6 +1406,17 @@
             style="border:none;background:none;color:var(--muted);cursor:pointer;font-size:1.1rem;padding:0 4px;line-height:1;transition:color .2s;"
             onmouseover="this.style.color='var(--grape)'" onmouseout="this.style.color='var(--muted)'">×</button>
         </div>`).join('');
+    } else if (isAdmin && locked) {
+      // Admin con lista cerrada: solo activo/inactivo
+      wrap.innerHTML = ST.lbf.map((p,i) => `
+        <div class="lbf-item">
+          <div class="pnum">${i+1}</div>
+          <div class="pname flex1">${p.name}</div>
+          <label style="cursor:pointer;display:flex;align-items:center;gap:5px;" class="txs ${p.active?'tgreen':'tmuted'}">
+            <input type="checkbox" ${p.active?'checked':''} onchange="toggleLBF(${i})" style="cursor:pointer;">
+            ${p.active?'Activo':'Inactivo'}
+          </label>
+        </div>`).join('');
     } else {
       // No-admin: solo lectura
       wrap.innerHTML = ST.lbf.map((p,i) => `
@@ -1350,26 +1428,59 @@
     }
   }
 
+  async function lockLBF() {
+    if (!ST.isAdmin) return;
+    if (!ST.lbf.length) { toast('⚠️ Primero agregá jugadores a la lista'); return; }
+    if (!confirm(`¿Cerrar la LBF con ${ST.lbf.length} jugadores?\n\nEsta acción fija el orden para todo el torneo (Art. 13/19).\nNo se puede deshacer.`)) return;
+    if (ST.fbDb) {
+      await ST.fbDb.ref('config/lbfLocked').set(true);
+      await ST.fbDb.ref('config/lbfLockedBy').set(ST.player);
+      await ST.fbDb.ref('config/lbfLockedAt').set(Date.now());
+    }
+    ST.lbfLocked = true;
+    localStorage.setItem('lbfLocked', 'true');
+    toast('🔒 LBF cerrada — el orden queda fijo para el torneo');
+    renderLBF();
+  }
+
+  async function unlockLBF() {
+    if (ST.player !== CFG.bootstrapAdmin) return;
+    if (!confirm('⚠️ EMERGENCIA: ¿Desbloquear la LBF?\nUsalo solo si hubo un error en la carga inicial.')) return;
+    if (ST.fbDb) await ST.fbDb.ref('config/lbfLocked').set(false);
+    ST.lbfLocked = false;
+    localStorage.setItem('lbfLocked', 'false');
+    toast('🔓 LBF desbloqueada — podés corregir el orden');
+    renderLBF();
+  }
+
   let _di=null;
-  function lbfDS(e,i){_di=i;e.dataTransfer.effectAllowed='move';}
+  function lbfDS(e,i){if(ST.lbfLocked){e.preventDefault();return;}_di=i;e.dataTransfer.effectAllowed='move';}
   function lbfDO(e){e.preventDefault();}
   function lbfDE(){_di=null;}
   function lbfDrop(e,to){
     e.preventDefault(); if(_di===null||_di===to) return;
     if(!ST.isAdmin){toast('Solo el admin puede reordenar');return;}
+    if(ST.lbfLocked){toast('🔒 La LBF está cerrada — el orden es fijo');return;}
     const arr=[...ST.lbf],[moved]=arr.splice(_di,1);
     arr.splice(to,0,moved); arr.forEach((p,i)=>p.lbfPosition=i+1);
     ST.lbf=arr; saveLBF(); renderLBF();
   }
-  function toggleLBF(i){if(!ST.isAdmin){toast('Solo el admin puede modificar la LBF');return;}ST.lbf[i].active=!ST.lbf[i].active;saveLBF();}
+  function toggleLBF(i){
+    if(!ST.isAdmin){toast('Solo el admin puede modificar');return;}
+    ST.lbf[i].active=!ST.lbf[i].active;
+    saveLBF();
+    // No re-renderizar todo (el checkbox ya cambió visualmente)
+  }
   function removeLBF(i){
     if(!ST.isAdmin){toast('Solo el admin puede eliminar jugadores');return;}
+    if(ST.lbfLocked){toast('🔒 La LBF está cerrada — no se puede eliminar');return;}
     if(!confirm(`Eliminar a ${ST.lbf[i].name} de la LBF?`)) return;
     ST.lbf.splice(i,1); ST.lbf.forEach((p,x)=>p.lbfPosition=x+1);
     saveLBF(); renderLBF();
   }
   function addLBFPlayer(){
     if(!ST.isAdmin){toast('Solo el admin puede agregar jugadores');return;}
+    if(ST.lbfLocked){toast('🔒 La LBF está cerrada — no se puede agregar');return;}
     const inp=document.getElementById('lbf-new-inp'), name=inp.value.trim().toUpperCase();
     if(!name){return;}
     if(ST.lbf.find(p=>p.name.toUpperCase()===name)){toast('⚠️ Ya está en la lista');return;}
