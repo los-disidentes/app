@@ -500,6 +500,8 @@
     ligaBase:       'https://www.ligacountrysur.com.ar',
     lockDays:       4,
     fbKey:          'fbDbUrl',
+    // URL de la base de datos — hardcodeada para que funcione en todos los dispositivos sin configuración
+    fbDefaultUrl:   'https://los-disidentes-app-default-rtdb.firebaseio.com',
     bootstrapAdmin: 'PABLO',   // ← nombre del admin principal (en mayúsculas)
   };
 
@@ -769,8 +771,9 @@
   // FIREBASE
   // ═══════════════════════════════════════════
   function initFirebase() {
-    const url = localStorage.getItem(CFG.fbKey);
-    document.getElementById('fb-url-inp').value = url || '';
+    // Usar URL guardada en localStorage, o la URL hardcodeada por defecto
+    const url = localStorage.getItem(CFG.fbKey) || CFG.fbDefaultUrl;
+    document.getElementById('fb-url-inp').value = url;
     if (!url) { setStatus(false, 'Sin Firebase — datos locales'); return; }
     try {
       let app;
