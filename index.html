@@ -1,0 +1,1300 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#0c2e1e">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="icon" href="https://los-disidentes.github.io/logo.png">
+  <title>Los Disidentes · App</title>
+
+  <!-- Fonts — same as the official site -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400;1,700&family=Inter:wght@400;500;600;700;800&display=swap">
+
+  <!-- Firebase SDK v9 compat -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+
+  <style>
+    /* ── VARIABLES (del sitio oficial) ─────────────────── */
+    :root {
+      --cream:      #f6f4ee;
+      --paper:      #ffffff;
+      --green:      #1c5b3a;
+      --green-dk:   #11402a;
+      --green-deep: #0c2e1e;
+      --grape:      #6f3d92;
+      --grape-lt:   #9460bd;
+      --lime:       #aebf3f;
+      --ink:        #1e2a24;
+      --muted:      #74827b;
+      --line:       #e5e1d6;
+      --serif:      'Cormorant Garamond', Georgia, 'Times New Roman', serif;
+      --sans:       'Inter', system-ui, -apple-system, sans-serif;
+      --r:          13px;
+      --shadow:     0 2px 16px rgba(28,91,58,0.08);
+      --shadow-md:  0 4px 28px rgba(28,91,58,0.13);
+    }
+
+    /* ── RESET ─────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-size: 15px; scroll-behavior: smooth; }
+    html, body { height: 100%; overflow: hidden; }
+    body {
+      font-family: var(--sans);
+      background: var(--cream);
+      color: var(--ink);
+      display: flex;
+      flex-direction: column;
+      -webkit-font-smoothing: antialiased;
+    }
+    ::selection { background: var(--green); color: #fff; }
+
+    /* ── STATUS BAR ─────────────────────────────────────── */
+    #status-bar {
+      display: flex; align-items: center; gap: 6px;
+      padding: 4px 16px;
+      background: var(--green-deep);
+      font-size: 0.66rem; color: rgba(255,255,255,0.6);
+      font-family: var(--sans); letter-spacing: 0.3px;
+      flex-shrink: 0;
+    }
+    .sdot { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); transition: background .4s; }
+    .sdot.on  { background: var(--lime); }
+    .sdot.off { background: #c0392b; }
+
+    /* ── HEADER ─────────────────────────────────────────── */
+    .header {
+      background: rgba(12,46,30,0.92);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid rgba(255,255,255,0.07);
+      padding: 10px 16px;
+      display: flex; align-items: center; gap: 12px;
+      flex-shrink: 0;
+      color: #fff;
+    }
+    .header-logo { width: 36px; height: 44px; flex-shrink: 0; object-fit: contain; }
+    .header-title { flex: 1; }
+    .header-title h1 {
+      font-family: var(--serif);
+      font-size: 1.2rem; font-weight: 700; font-style: italic;
+      color: #fff; line-height: 1.1; letter-spacing: 0.2px;
+    }
+    .header-title span {
+      font-size: 0.62rem; color: rgba(174,205,185,0.85);
+      text-transform: uppercase; letter-spacing: 1.5px;
+    }
+    .player-badge {
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.18);
+      border-radius: 20px; padding: 5px 13px;
+      font-size: 0.72rem; color: #fff; cursor: pointer;
+      white-space: nowrap; max-width: 110px; overflow: hidden; text-overflow: ellipsis;
+      transition: background .2s;
+    }
+    .player-badge:hover { background: rgba(255,255,255,0.18); }
+
+    /* ── NAV ────────────────────────────────────────────── */
+    .nav {
+      display: flex;
+      background: var(--paper);
+      border-bottom: 1px solid var(--line);
+      overflow-x: auto; scrollbar-width: none;
+      flex-shrink: 0;
+      box-shadow: 0 1px 8px rgba(28,91,58,0.06);
+    }
+    .nav::-webkit-scrollbar { display: none; }
+    .nav-btn {
+      flex: 1; min-width: 55px; padding: 9px 4px;
+      border: none; background: none;
+      color: var(--muted);
+      font-family: var(--sans); font-size: 0.58rem; font-weight: 600;
+      cursor: pointer; text-transform: uppercase; letter-spacing: .5px;
+      display: flex; flex-direction: column; align-items: center; gap: 3px;
+      position: relative; transition: color .2s;
+    }
+    .nav-btn .ni { font-size: 1.15rem; }
+    .nav-btn.active { color: var(--green); }
+    .nav-btn.active::after {
+      content: ''; position: absolute; bottom: 0; left: 20%; right: 20%;
+      height: 2px; background: var(--green); border-radius: 2px;
+    }
+    .nbadge {
+      position: absolute; top: 6px; right: 8px;
+      background: var(--grape); color: #fff;
+      border-radius: 10px; padding: 1px 5px;
+      font-size: 0.58rem; font-weight: 700;
+    }
+
+    /* ── CONTENT ────────────────────────────────────────── */
+    .tab { flex: 1; overflow-y: auto; padding: 16px; display: none; background: var(--cream); }
+    .tab.active { display: block; }
+    #tab-chat.active { display: flex; flex-direction: column; padding: 0; }
+
+    /* ── SCROLLBAR ──────────────────────────────────────── */
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--line); border-radius: 2px; }
+
+    /* ── CARDS ──────────────────────────────────────────── */
+    .card {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: var(--r);
+      padding: 16px;
+      margin-bottom: 12px;
+      box-shadow: var(--shadow);
+    }
+    .card-title {
+      font-family: var(--serif);
+      font-size: 1rem; font-weight: 600;
+      color: var(--green-dk);
+      margin-bottom: 10px;
+      display: flex; align-items: center; gap: 7px;
+    }
+
+    /* ── SECTION LABEL ──────────────────────────────────── */
+    .slabel {
+      font-size: 0.62rem; text-transform: uppercase; letter-spacing: 1.2px;
+      color: var(--muted); margin: 14px 0 7px; font-weight: 600;
+    }
+
+    /* ── MATCH HERO ─────────────────────────────────────── */
+    .match-hero {
+      background: radial-gradient(at 50% 0%, var(--green) 0%, var(--green-dk) 50%, var(--green-deep) 100%);
+      border-radius: var(--r); padding: 22px 18px;
+      margin-bottom: 14px; color: #fff; text-align: center;
+      position: relative; overflow: hidden;
+      box-shadow: var(--shadow-md);
+    }
+    .match-hero::after {
+      content: ''; position: absolute; inset: 0;
+      background-image: radial-gradient(rgba(255,255,255,0.06) 1px, transparent 1px);
+      background-size: 22px 22px; pointer-events: none;
+    }
+    .match-hero > * { position: relative; z-index: 1; }
+    .match-kicker {
+      font-size: 0.63rem; letter-spacing: 3px; text-transform: uppercase;
+      color: rgba(174,205,185,0.85); margin-bottom: 10px;
+    }
+    .match-vs {
+      font-family: var(--serif); font-size: 1.5rem; font-weight: 700; font-style: italic;
+      margin-bottom: 2px;
+    }
+    .match-rival {
+      font-family: var(--serif); font-size: 1.15rem; font-weight: 600;
+      color: rgba(255,255,255,0.85); margin-bottom: 14px;
+    }
+    .match-meta { display: flex; justify-content: center; gap: 16px; font-size: 0.72rem; color: rgba(255,255,255,0.65); margin-bottom: 16px; }
+    .countdown-big { font-family: var(--serif); font-size: 3.2rem; font-weight: 700; line-height: 1; }
+    .countdown-sub { font-size: 0.63rem; color: rgba(174,205,185,0.85); text-transform: uppercase; letter-spacing: 2px; }
+
+    /* ── RESULT CHIPS ───────────────────────────────────── */
+    .result-chip {
+      font-family: var(--serif); font-weight: 700; font-size: 1rem;
+      padding: 3px 14px; border-radius: 50px;
+    }
+    .result-chip.win  { background: rgba(28,91,58,0.1); color: var(--green); }
+    .result-chip.loss { background: rgba(111,61,146,0.1); color: var(--grape); }
+    .result-chip.draw { background: rgba(116,130,123,0.1); color: var(--muted); }
+
+    /* ── STANDINGS ──────────────────────────────────────── */
+    .stable { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+    .stable th { color: var(--muted); font-size: 0.63rem; text-transform: uppercase; letter-spacing: .5px; padding: 5px 7px; text-align: left; border-bottom: 1px solid var(--line); }
+    .stable td { padding: 7px; border-bottom: 1px solid rgba(229,225,214,0.6); }
+    .stable tr.me td { color: var(--green); font-weight: 700; }
+    .stable tr:hover td { background: rgba(28,91,58,0.03); }
+
+    /* ── ATTENDANCE ─────────────────────────────────────── */
+    .att-stats { display: flex; gap: 10px; margin-bottom: 14px; }
+    .att-stat { flex: 1; background: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: 11px; text-align: center; box-shadow: var(--shadow); }
+    .att-stat-n { font-family: var(--serif); font-size: 1.8rem; font-weight: 700; line-height: 1; }
+    .att-stat-l { font-size: 0.62rem; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+    .att-stat.g .att-stat-n { color: var(--green); }
+    .att-stat.r .att-stat-n { color: var(--grape); }
+    .att-stat.x .att-stat-n { color: var(--muted); }
+
+    .prow { display: flex; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--line); gap: 10px; }
+    .prow:last-child { border-bottom: none; }
+    .pnum {
+      width: 26px; height: 26px; border-radius: 50%;
+      background: var(--green-deep); color: rgba(174,205,185,0.9);
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--serif); font-size: 0.85rem; font-weight: 600;
+      flex-shrink: 0;
+    }
+    .pname { flex: 1; font-size: 0.88rem; font-weight: 500; }
+
+    .abtn-pair { display: flex; gap: 8px; }
+    .abtn {
+      flex: 1; padding: 9px; border-radius: 8px;
+      font-size: 0.8rem; font-weight: 600; cursor: pointer;
+      background: none; transition: all .2s;
+      font-family: var(--sans);
+    }
+    .abtn.confirm { border: 1.5px solid var(--green); color: var(--green); }
+    .abtn.confirm.active { background: var(--green); color: #fff; }
+    .abtn.decline { border: 1.5px solid var(--grape); color: var(--grape); }
+    .abtn.decline.active { background: var(--grape); color: #fff; }
+
+    .lock-banner {
+      background: rgba(111,61,146,0.08); border: 1px solid rgba(111,61,146,0.25);
+      border-radius: 8px; padding: 9px 14px; font-size: 0.8rem;
+      color: var(--grape); margin-bottom: 12px;
+      display: flex; align-items: center; gap: 8px;
+    }
+
+    /* ── CHIPS ──────────────────────────────────────────── */
+    .chip {
+      display: inline-flex; align-items: center; gap: 3px;
+      padding: 3px 10px; border-radius: 20px; font-size: 0.69rem; font-weight: 600;
+    }
+    .cg  { background: rgba(28,91,58,0.1);   color: var(--green); border: 1px solid rgba(28,91,58,0.2); }
+    .cr  { background: rgba(111,61,146,0.1); color: var(--grape); border: 1px solid rgba(111,61,146,0.2); }
+    .co  { background: rgba(174,191,63,0.12); color: #6b7a0a;    border: 1px solid rgba(174,191,63,0.3); }
+    .cx  { background: rgba(116,130,123,0.1); color: var(--muted); border: 1px solid var(--line); }
+
+    /* ── PAIRS ──────────────────────────────────────────── */
+    .fcard {
+      background: var(--paper); border: 1px solid var(--line);
+      border-radius: var(--r); padding: 14px; margin-bottom: 10px;
+      box-shadow: var(--shadow); transition: box-shadow .2s;
+    }
+    .fcard.best {
+      border-color: var(--green);
+      box-shadow: 0 4px 20px rgba(28,91,58,0.15);
+    }
+    .crow { display: flex; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); gap: 10px; }
+    .crow:last-of-type { border-bottom: none; }
+    .clabel {
+      width: 30px; height: 30px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--serif); font-size: 0.85rem; font-weight: 700;
+      flex-shrink: 0;
+    }
+    .clabel.d1 { background: var(--green); color: #fff; }
+    .clabel.d2 { background: rgba(28,91,58,0.12); color: var(--green); border: 1.5px solid rgba(28,91,58,0.3); }
+    .clabel.d3 { background: transparent; color: var(--muted); border: 1.5px solid var(--line); }
+    .cplayers { flex: 1; }
+    .cplayers strong { font-size: 0.88rem; font-weight: 600; }
+    .cplayers small { color: var(--muted); font-size: 0.68rem; display: block; }
+    .csum { font-family: var(--serif); font-size: 1rem; font-weight: 700; color: var(--green); }
+
+    /* ── BUTTONS ────────────────────────────────────────── */
+    .btn { padding: 10px 20px; border-radius: 8px; border: none; font-size: 0.88rem; font-weight: 600; cursor: pointer; transition: all .2s; font-family: var(--sans); }
+    .btn-p { background: var(--green); color: #fff; }
+    .btn-p:hover { background: var(--green-dk); }
+    .btn-o { background: none; border: 1.5px solid var(--line); color: var(--ink); }
+    .btn-o:hover { border-color: var(--green); color: var(--green); }
+    .btn-d { background: none; border: 1.5px solid rgba(111,61,146,0.4); color: var(--grape); }
+    .btn-d:hover { background: rgba(111,61,146,0.08); }
+    .btn-sm { padding: 6px 14px; font-size: 0.78rem; }
+    .btn-full { width: 100%; text-align: center; }
+
+    /* ── INPUTS ─────────────────────────────────────────── */
+    .inp {
+      width: 100%; background: var(--cream); border: 1.5px solid var(--line);
+      border-radius: 8px; padding: 9px 14px; color: var(--ink);
+      font-family: var(--sans); font-size: 0.88rem; outline: none; margin-bottom: 8px;
+      transition: border-color .2s;
+    }
+    .inp:focus { border-color: var(--green); background: #fff; }
+    .inp::placeholder { color: var(--muted); }
+
+    /* ── CHAT ───────────────────────────────────────────── */
+    .chat-msgs { flex: 1; overflow-y: auto; padding: 16px; background: var(--cream); }
+    .cmsg { margin-bottom: 10px; max-width: 80%; }
+    .cmsg.mine { margin-left: auto; }
+    .cbubble {
+      padding: 9px 13px; border-radius: 14px;
+      font-size: 0.88rem; line-height: 1.5;
+    }
+    .cmsg.mine .cbubble {
+      background: var(--green); color: #fff; border-bottom-right-radius: 4px;
+    }
+    .cmsg:not(.mine) .cbubble {
+      background: var(--paper); border: 1px solid var(--line); color: var(--ink);
+      border-bottom-left-radius: 4px; box-shadow: var(--shadow);
+    }
+    .csender { font-size: 0.62rem; color: var(--muted); margin-bottom: 3px; padding: 0 4px; }
+    .ctime   { font-size: 0.6rem; color: rgba(255,255,255,0.7); padding: 2px 4px 0; text-align: right; }
+    .ctime.other { color: var(--muted); }
+    .chat-input-area {
+      padding: 11px 14px; border-top: 1px solid var(--line);
+      display: flex; gap: 8px; background: var(--paper); flex-shrink: 0;
+    }
+    .chat-inp {
+      flex: 1; background: var(--cream); border: 1.5px solid var(--line);
+      border-radius: 22px; padding: 8px 16px; color: var(--ink);
+      font-family: var(--sans); font-size: 0.9rem; outline: none; transition: border-color .2s;
+    }
+    .chat-inp:focus { border-color: var(--green); }
+    .chat-inp::placeholder { color: var(--muted); }
+    .chat-send {
+      width: 40px; height: 40px; border-radius: 50%;
+      background: var(--green); border: none; color: #fff;
+      font-size: 1rem; cursor: pointer; display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; transition: background .2s;
+    }
+    .chat-send:hover { background: var(--green-dk); }
+
+    /* ── PERFORMANCE ─────────────────────────────────────── */
+    .perf-row { display: flex; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--line); gap: 9px; }
+    .perf-row:last-child { border-bottom: none; }
+    .perf-rank { width: 22px; font-family: var(--serif); font-size: 0.9rem; color: var(--muted); text-align: center; }
+    .perf-rank.top { color: var(--green); font-weight: 700; }
+    .perf-name { flex: 1; font-size: 0.88rem; font-weight: 500; }
+    .perf-sub { font-size: 0.65rem; color: var(--muted); }
+    .pbar-w { width: 70px; height: 5px; background: var(--line); border-radius: 3px; }
+    .pbar { height: 100%; border-radius: 3px; transition: width .6s; }
+    .pbar.high { background: var(--green); }
+    .pbar.mid  { background: var(--lime); }
+    .pbar.low  { background: var(--grape); }
+    .ppct { width: 38px; text-align: right; font-family: var(--serif); font-size: 0.9rem; font-weight: 700; }
+
+    /* ── LBF ────────────────────────────────────────────── */
+    .lbf-item { display: flex; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); gap: 8px; }
+    .lbf-item:last-child { border-bottom: none; }
+    .drag-handle { color: var(--muted); cursor: grab; font-size: 1rem; flex-shrink: 0; user-select: none; }
+
+    /* ── MODAL ──────────────────────────────────────────── */
+    .modal-ov {
+      position: fixed; inset: 0; background: rgba(12,46,30,0.75);
+      backdrop-filter: blur(6px); z-index: 100;
+      display: flex; align-items: center; justify-content: center; padding: 20px;
+    }
+    .modal-ov.hidden { display: none; }
+    .modal-box {
+      background: var(--paper); border: 1px solid var(--line);
+      border-radius: 18px; padding: 28px; width: 100%; max-width: 380px;
+      box-shadow: 0 24px 60px rgba(12,46,30,0.25);
+    }
+    .modal-title {
+      font-family: var(--serif); font-size: 1.5rem; font-weight: 700; font-style: italic;
+      color: var(--green-dk); margin-bottom: 6px; text-align: center;
+    }
+    .modal-sub { font-size: 0.82rem; color: var(--muted); text-align: center; margin-bottom: 20px; }
+
+    /* ── TOAST ──────────────────────────────────────────── */
+    .toast {
+      position: fixed; bottom: 72px; left: 50%; transform: translateX(-50%);
+      background: var(--green-deep); color: #fff;
+      border-radius: 8px; padding: 9px 18px; font-size: 0.84rem; z-index: 200;
+      animation: su .3s ease; max-width: 300px; text-align: center; pointer-events: none;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+    }
+    @keyframes su { from { opacity:0; transform:translateX(-50%) translateY(10px); } to { opacity:1; transform:translateX(-50%) translateY(0); } }
+
+    /* ── SPINNER ─────────────────────────────────────────── */
+    .spin { display: inline-block; width: 22px; height: 22px; border: 2px solid var(--line); border-top-color: var(--green); border-radius: 50%; animation: rot .8s linear infinite; }
+    @keyframes rot { to { transform: rotate(360deg); } }
+
+    /* ── EMPTY STATE ─────────────────────────────────────── */
+    .empty { text-align: center; padding: 36px 16px; color: var(--muted); }
+    .empty .ei { font-size: 2.6rem; margin-bottom: 10px; }
+    .empty h3 { font-family: var(--serif); font-size: 1.1rem; color: var(--green-dk); margin-bottom: 6px; }
+    .empty p { font-size: 0.85rem; line-height: 1.6; }
+
+    /* ── UTILITY ─────────────────────────────────────────── */
+    .flex   { display: flex; } .flex1  { flex: 1; } .gap8   { gap: 8px; }
+    .mt8    { margin-top: 8px; } .mt14  { margin-top: 14px; }
+    .tgreen { color: var(--green); } .tgrape { color: var(--grape); }
+    .tmuted { color: var(--muted); } .tink   { color: var(--ink); }
+    .tcenter { text-align: center; }
+    .tsm    { font-size: 0.82rem; } .txs   { font-size: 0.7rem; }
+    .fbold  { font-weight: 700; } .fserif { font-family: var(--serif); }
+    .hidden { display: none !important; } .w100 { width: 100%; }
+    .italic { font-style: italic; }
+    .separator { height: 1px; background: var(--line); margin: 10px 0; }
+  </style>
+</head>
+
+<body>
+
+  <!-- STATUS BAR -->
+  <div id="status-bar">
+    <span class="sdot" id="sdot"></span>
+    <span id="stext">Iniciando…</span>
+  </div>
+
+  <!-- HEADER -->
+  <header class="header">
+    <img class="header-logo" src="https://los-disidentes.github.io/logo.png" alt="Los Disidentes"
+         onerror="this.style.display='none'; document.getElementById('logo-svg').style.display='block'">
+    <svg id="logo-svg" style="display:none; width:36px; height:44px;" viewBox="0 0 100 120" xmlns="http://www.w3.org/2000/svg">
+      <path d="M50 4 L96 22 L96 68 C96 92 50 116 50 116 C50 116 4 92 4 68 L4 22 Z" fill="rgba(255,255,255,0.12)" stroke="rgba(255,255,255,0.4)" stroke-width="3"/>
+      <text x="50" y="79" font-family="Georgia,serif" font-size="54" font-weight="bold" fill="#fff" text-anchor="middle">D</text>
+    </svg>
+    <div class="header-title">
+      <h1>Los Disidentes</h1>
+      <span>Quinta B Zona 2 · Liga Country Sur</span>
+    </div>
+    <div class="player-badge" onclick="changePlayer()" title="Cambiar nombre">
+      <span id="player-badge-txt">…</span>
+    </div>
+  </header>
+
+  <!-- NAV -->
+  <nav class="nav">
+    <button class="nav-btn active" data-tab="fixture"      onclick="switchTab('fixture')">      <span class="ni">📅</span>Fixture</button>
+    <button class="nav-btn"        data-tab="asistencia"   onclick="switchTab('asistencia')">   <span class="ni">✋</span>Asistencia<span class="nbadge hidden" id="badge-att">!</span></button>
+    <button class="nav-btn"        data-tab="parejas"      onclick="switchTab('parejas')">      <span class="ni">🎾</span>Parejas</button>
+    <button class="nav-btn"        data-tab="chat"         onclick="switchTab('chat')">         <span class="ni">💬</span>Chat<span class="nbadge hidden" id="badge-chat">0</span></button>
+    <button class="nav-btn"        data-tab="rendimientos" onclick="switchTab('rendimientos')"> <span class="ni">📊</span>Stats</button>
+    <button class="nav-btn"        data-tab="lbf"          onclick="switchTab('lbf')">          <span class="ni">⚙️</span>LBF</button>
+  </nav>
+
+  <!-- ════════ FIXTURE ════════ -->
+  <section id="tab-fixture" class="tab active">
+    <div id="next-match-wrap"><div class="tcenter" style="padding:28px"><span class="spin"></span></div></div>
+    <div class="slabel">TABLA DE POSICIONES</div>
+    <div class="card" id="standings-wrap"><div class="tcenter tmuted tsm" style="padding:10px">Cargando…</div></div>
+    <div id="results-wrap"></div>
+  </section>
+
+  <!-- ════════ ASISTENCIA ════════ -->
+  <section id="tab-asistencia" class="tab">
+    <div id="att-content"><div class="tcenter" style="padding:28px"><span class="spin"></span></div></div>
+  </section>
+
+  <!-- ════════ PAREJAS ════════ -->
+  <section id="tab-parejas" class="tab">
+    <div id="parejas-content">
+      <div class="empty">
+        <div class="ei">🎾</div>
+        <h3>Parejas del partido</h3>
+        <p>Las sugerencias aparecen cuando hay 6 o más jugadores confirmados para la fecha.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════ CHAT ════════ -->
+  <section id="tab-chat" class="tab">
+    <div class="chat-msgs" id="chat-msgs">
+      <div class="empty"><div class="ei">💬</div><h3>El chat está vacío</h3><p>¡Rompé el hielo!</p></div>
+    </div>
+    <div class="chat-input-area">
+      <input class="chat-inp" id="chat-inp" type="text" placeholder="Escribí un mensaje…"
+             onkeypress="if(event.key==='Enter') sendChat()">
+      <button class="chat-send" onclick="sendChat()">➤</button>
+    </div>
+  </section>
+
+  <!-- ════════ RENDIMIENTOS ════════ -->
+  <section id="tab-rendimientos" class="tab">
+    <div id="rend-content"><div class="tcenter" style="padding:28px"><span class="spin"></span></div></div>
+  </section>
+
+  <!-- ════════ LBF / CONFIG ════════ -->
+  <section id="tab-lbf" class="tab">
+    <div class="card">
+      <div class="card-title">📋 Lista de Buena Fe</div>
+      <p class="tsm tmuted" style="margin-bottom:12px; line-height:1.5;">
+        El orden determina las canchas. Cada partido los presentes se renumeran del 1 al N (Art. 19). D1 = suma más baja, D3 = suma más alta (Art. 13).
+      </p>
+      <div id="lbf-list"></div>
+      <div class="flex gap8 mt8">
+        <input class="inp flex1" id="lbf-new-inp" placeholder="Nombre del jugador" style="margin:0">
+        <button class="btn btn-p btn-sm" onclick="addLBFPlayer()">+ Agregar</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">🔥 Sincronización Firebase</div>
+      <p class="tsm tmuted" style="margin-bottom:10px; line-height:1.5;">
+        Para que todos los jugadores vean los mismos datos en tiempo real, pegá el URL de tu Realtime Database. Ver <strong>README.md</strong> para instrucciones.
+      </p>
+      <input class="inp" id="fb-url-inp" placeholder="https://tu-proyecto-default-rtdb.firebaseio.com">
+      <button class="btn btn-p w100" onclick="saveFirebaseConfig()">Guardar y conectar</button>
+    </div>
+
+    <div class="card">
+      <div class="card-title">⚙️ Campeonato</div>
+      <div class="flex gap8" style="align-items:center;">
+        <input class="inp flex1" id="camp-id-inp" value="2155" style="margin:0; padding:7px 12px;">
+        <button class="btn btn-o btn-sm" onclick="saveCampId()">Cambiar</button>
+      </div>
+      <p class="txs tmuted mt8">2151 = Cuarta · 2154 = 5ᵃB Zona 1 · 2155 = 5ᵃB Zona 2</p>
+    </div>
+  </section>
+
+  <!-- MODAL: NOMBRE -->
+  <div class="modal-ov" id="modal-player">
+    <div class="modal-box">
+      <div class="tcenter" style="margin-bottom:18px;">
+        <img src="https://los-disidentes.github.io/logo.png" alt="Los Disidentes"
+             style="width:72px; height:72px; object-fit:contain; margin:0 auto;"
+             onerror="this.style.display='none'">
+      </div>
+      <div class="modal-title">¡Bienvenido!</div>
+      <div class="modal-sub">¿Cómo te llaman en Los Disidentes?</div>
+      <input class="inp" id="pname-inp" placeholder="Tu nombre" maxlength="30"
+             onkeypress="if(event.key==='Enter') setPlayerName()">
+      <button class="btn btn-p w100" onclick="setPlayerName()">Entrar al equipo 🍇</button>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════════════════════════
+       APP SCRIPT
+  ════════════════════════════════════════════════════════ -->
+  <script>
+
+  // ═══════════════════════════════════════════════
+  // CONFIG & STATE
+  // ═══════════════════════════════════════════════
+  const CFG = {
+    campId:       parseInt(localStorage.getItem('campId') || '2155'),
+    teamKeywords: ['disidentes', 'miralagos los'],
+    corsProxy:    'https://api.allorigins.win/raw?url=',
+    ligaBase:     'https://www.ligacountrysur.com.ar',
+    lockDays:     4,
+    fbKey:        'fbDbUrl',
+  };
+
+  const ST = {
+    player:       localStorage.getItem('playerName') || null,
+    activeTab:    'fixture',
+    fixture:      JSON.parse(localStorage.getItem('fixture')   || '[]'),
+    standings:    JSON.parse(localStorage.getItem('standings') || '[]'),
+    lbf:          JSON.parse(localStorage.getItem('lbf')       || '[]'),
+    attendance:   {},
+    chat:         [],
+    perfs:        [],
+    formation:    null,
+    fbDb:         null,
+    fbOK:         false,
+    unreadChat:   0,
+    lastChatSeen: parseInt(localStorage.getItem('lastChatSeen') || '0'),
+    perfLoaded:   false,
+  };
+
+  // ═══════════════════════════════════════════════
+  // STATUS
+  // ═══════════════════════════════════════════════
+  function setStatus(ok, txt) {
+    ST.fbOK = ok;
+    const dot = document.getElementById('sdot');
+    dot.className = 'sdot ' + (ok ? 'on' : 'off');
+    document.getElementById('stext').textContent = txt;
+  }
+
+  function toast(msg, ms = 2600) {
+    document.querySelectorAll('.toast').forEach(e => e.remove());
+    const el = document.createElement('div');
+    el.className = 'toast'; el.textContent = msg;
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), ms);
+  }
+
+  // ═══════════════════════════════════════════════
+  // FIREBASE
+  // ═══════════════════════════════════════════════
+  function initFirebase() {
+    const url = localStorage.getItem(CFG.fbKey);
+    document.getElementById('fb-url-inp').value = url || '';
+    if (!url) { setStatus(false, 'Sin Firebase — datos locales'); return; }
+
+    try {
+      let app;
+      try { app = firebase.app(); } catch(_) {
+        app = firebase.initializeApp({ databaseURL: url });
+      }
+      ST.fbDb = firebase.database();
+
+      ST.fbDb.ref('.info/connected').on('value', s => {
+        const ok = s.val() === true;
+        setStatus(ok, ok ? 'Sincronizado 🍇' : 'Reconectando…');
+      });
+
+      ST.fbDb.ref('lbf').on('value', s => {
+        const d = s.val();
+        if (d && Array.isArray(d)) {
+          ST.lbf = d;
+          localStorage.setItem('lbf', JSON.stringify(d));
+          if (ST.activeTab === 'lbf')        renderLBF();
+          if (ST.activeTab === 'asistencia') renderAtt();
+          if (ST.activeTab === 'parejas')    renderParejas();
+        }
+      });
+
+      const nm = nextMatch();
+      if (nm) watchAttendance(nm.id);
+
+      ST.fbDb.ref('chat').limitToLast(120).on('value', s => {
+        const d = s.val();
+        if (!d) return;
+        ST.chat = Object.entries(d).map(([id,m]) => ({id,...m})).sort((a,b) => a.ts - b.ts);
+        const last = ST.chat[ST.chat.length-1];
+        if (last && last.ts > ST.lastChatSeen && last.player !== ST.player) {
+          ST.unreadChat++;
+          if (ST.activeTab !== 'chat') {
+            const b = document.getElementById('badge-chat');
+            b.textContent = ST.unreadChat; b.classList.remove('hidden');
+          }
+        }
+        if (ST.activeTab === 'chat') renderChat();
+      });
+
+      if (nm) {
+        ST.fbDb.ref(`formation/${nm.id}`).on('value', s => {
+          ST.formation = s.val();
+          if (ST.activeTab === 'parejas') renderParejas();
+        });
+      }
+
+      document.getElementById('fb-url-inp').value = url;
+    } catch(e) {
+      setStatus(false, 'Error: ' + e.message.slice(0,35));
+    }
+  }
+
+  function watchAttendance(matchId) {
+    if (!ST.fbDb) return;
+    ST.fbDb.ref(`attendance/${matchId}`).on('value', s => {
+      ST.attendance = s.val() || {};
+      if (ST.activeTab === 'asistencia') renderAtt();
+      if (ST.activeTab === 'parejas')    renderParejas();
+      updateAttBadge();
+    });
+  }
+
+  function saveFirebaseConfig() {
+    const url = document.getElementById('fb-url-inp').value.trim();
+    if (!url || !url.includes('firebaseio.com')) { toast('❌ URL inválida'); return; }
+    localStorage.setItem(CFG.fbKey, url);
+    toast('✅ Guardado — recargando…');
+    setTimeout(() => location.reload(), 900);
+  }
+
+  function saveCampId() {
+    const v = parseInt(document.getElementById('camp-id-inp').value);
+    if (!v) return;
+    localStorage.setItem('campId', v);
+    CFG.campId = v;
+    toast('✅ Campeonato actualizado');
+    setTimeout(() => location.reload(), 900);
+  }
+
+  // ═══════════════════════════════════════════════
+  // LIGA API
+  // ═══════════════════════════════════════════════
+  async function apiGet(path) {
+    const url = CFG.ligaBase + path;
+    try {
+      const r = await fetch(CFG.corsProxy + encodeURIComponent(url), { signal: AbortSignal.timeout(9000) });
+      return JSON.parse(await r.text());
+    } catch(_) {}
+    try {
+      const r = await fetch(url, { signal: AbortSignal.timeout(5000) });
+      return await r.json();
+    } catch(e) { console.warn('API off:', path); return null; }
+  }
+
+  function isMyTeam(name) {
+    if (!name) return false;
+    const n = name.toLowerCase();
+    return CFG.teamKeywords.some(k => n.includes(k));
+  }
+
+  async function loadFixture() {
+    const data = await apiGet(`/api/fixture_mod.php?NroCampeonato=${CFG.campId}`);
+    if (!data) { if (ST.fixture.length) renderFixture(); return; }
+
+    const matches = [];
+    data.forEach(fecha => {
+      (fecha.partidos || []).forEach(p => {
+        if (!isMyTeam(p.Local) && !isMyTeam(p.Visitante)) return;
+        matches.push({
+          id:     p.NroPartidoCampeonato,
+          rueda:  parseInt(p.RuedaPartido) || 0,
+          fecha:  p.FechaPartido,
+          hora:   p.HoraPartido || '',
+          local:  p.Local,
+          visitor:p.Visitante,
+          gL:     parseInt(p.GolesLocal)     || 0,
+          gV:     parseInt(p.GolesVisitante) || 0,
+          played: p.Jugado === '1' || p.Jugado === 1,
+          home:   isMyTeam(p.Local),
+        });
+      });
+    });
+    ST.fixture = matches.sort((a,b) => new Date(a.fecha) - new Date(b.fecha));
+    localStorage.setItem('fixture', JSON.stringify(ST.fixture));
+    renderFixture();
+    if (ST.fbDb) { const nm = nextMatch(); if (nm) watchAttendance(nm.id); }
+  }
+
+  async function loadStandings() {
+    const data = await apiGet(`/api/tabla_posiciones.php?NroCampeonato=${CFG.campId}`);
+    if (!data) { if (ST.standings.length) renderStandings(); return; }
+    ST.standings = data;
+    localStorage.setItem('standings', JSON.stringify(data));
+    renderStandings();
+  }
+
+  async function loadPerformances() {
+    const played = ST.fixture.filter(m => m.played);
+    if (!played.length) { ST.perfLoaded = true; renderRend(); return; }
+    const stats = {};
+
+    for (const match of played) {
+      const data = await apiGet(`/resultadopartidotenis_visita.php?NroPartidoCampeonato=${match.id}`);
+      if (!data || !Array.isArray(data)) continue;
+      for (const c of data) {
+        const eq1isUs = isMyTeam(c.equipo1);
+        const p1 = eq1isUs ? san(c.nombre1) : san(c.nombre3);
+        const p2 = eq1isUs ? san(c.nombre2) : san(c.nombre4);
+        const court = parseInt((c.tipoPartido||'Doble 1').replace(/\D/g,'')) || 1;
+        const s = [[parseInt(c.set1)||0,parseInt(c.set1_2)||0],[parseInt(c.set2)||0,parseInt(c.set2_2)||0],[parseInt(c.set3)||0,parseInt(c.set3_2)||0]];
+        let ours=0,theirs=0;
+        s.forEach(([a,b]) => { if(a>b) ours++; else if(b>a) theirs++; });
+        if (!eq1isUs) [ours,theirs]=[theirs,ours];
+        const won = ours > theirs;
+        for (const n of [p1,p2]) {
+          if (!n) continue;
+          if (!stats[n]) stats[n]={W:0,L:0,cW:{1:0,2:0,3:0},cL:{1:0,2:0,3:0},pairs:{}};
+          const s2=stats[n];
+          if(won){s2.W++;s2.cW[court]++;}else{s2.L++;s2.cL[court]++;}
+          const partner=n===p1?p2:p1;
+          if(partner){if(!s2.pairs[partner])s2.pairs[partner]={W:0,L:0};if(won)s2.pairs[partner].W++;else s2.pairs[partner].L++;}
+        }
+      }
+    }
+
+    ST.perfs = Object.entries(stats).map(([name,s])=>({
+      name, W:s.W, L:s.L, total:s.W+s.L,
+      pct: s.W+s.L>0 ? Math.round(s.W/(s.W+s.L)*100) : 0,
+      cW:s.cW, cL:s.cL, pairs:s.pairs,
+    })).sort((a,b)=>b.pct-a.pct||b.total-a.total);
+
+    ST.perfLoaded = true;
+    renderRend();
+  }
+
+  function san(n) { return (n||'').trim().toUpperCase(); }
+
+  // ═══════════════════════════════════════════════
+  // PAIRS ENGINE — Art. 13 + Art. 19
+  // ═══════════════════════════════════════════════
+  function getAllPairings(players) {
+    if (players.length < 6) return [];
+    const p6=[...players.slice(0,6)], res=[], [a,...rest]=p6;
+    for(let i=0;i<rest.length;i++){
+      const pair1=[a,rest[i]], rem=rest.filter((_,j)=>j!==i);
+      for(let j=0;j<rem.length-1;j++)
+        for(let k=j+1;k<rem.length;k++){
+          const pair2=[rem[j],rem[k]],pair3=rem.filter((_,x)=>x!==j&&x!==k);
+          res.push([pair1,pair2,pair3]);
+        }
+    }
+    return res;
+  }
+
+  function assignCourts(pairing) {
+    const sorted = pairing
+      .map(pair => ({ pair, sum: pair[0].mn+pair[1].mn }))
+      .sort((a,b) => a.sum!==b.sum ? a.sum-b.sum : Math.min(...a.pair.map(p=>p.mn))-Math.min(...b.pair.map(p=>p.mn)));
+    return { d1:sorted[0].pair, d1s:sorted[0].sum, d2:sorted[1].pair, d2s:sorted[1].sum, d3:sorted[2].pair, d3s:sorted[2].sum };
+  }
+
+  function pairPerf(n1,n2) {
+    const p=ST.perfs.find(x=>x.name===n1);
+    if(!p||!p.pairs[n2]) return 0;
+    const pr=p.pairs[n2], tot=pr.W+pr.L;
+    return tot>0 ? pr.W/tot : 0;
+  }
+
+  function playerPct(name) { const p=ST.perfs.find(x=>x.name===name); return p?p.pct:50; }
+
+  function suggestFormations(confirmed, count=5) {
+    if (confirmed.length<6) return [];
+    const formations = getAllPairings(confirmed).map(pairing => {
+      const courts = assignCourts(pairing);
+      let perf=0;
+      for(const [pair] of [[courts.d1],[courts.d2],[courts.d3]]){
+        const [p1,p2]=[courts.d1,courts.d2,courts.d3][[[courts.d1],[courts.d2],[courts.d3]].indexOf([pair])];
+      }
+      [[courts.d1],[courts.d2],[courts.d3]].forEach(([pair],ci)=>{
+        const p=[courts.d1,courts.d2,courts.d3][ci];
+        perf += pairPerf(p[0].name,p[1].name);
+        perf += (playerPct(p[0].name)+playerPct(p[1].name))/200;
+      });
+      return {...courts, perf};
+    });
+    formations.sort((a,b)=>b.perf-a.perf);
+    return formations.slice(0,count);
+  }
+
+  function getPairHist(n1,n2) {
+    const p=ST.perfs.find(x=>x.name===n1);
+    if(!p||!p.pairs[n2]) return null;
+    const pr=p.pairs[n2]; return {W:pr.W,L:pr.L,tot:pr.W+pr.L};
+  }
+
+  // ═══════════════════════════════════════════════
+  // HELPERS
+  // ═══════════════════════════════════════════════
+  function nextMatch() {
+    const t=new Date(); t.setHours(0,0,0,0);
+    const up=ST.fixture.filter(m=>!m.played&&new Date(m.fecha)>=t);
+    return up.length?up[0]:null;
+  }
+  function isLocked(m) { return m ? (new Date(m.fecha)-new Date())/86400000<=CFG.lockDays : false; }
+  function daysUntil(s) { const d=new Date(s);d.setHours(0,0,0,0);const t=new Date();t.setHours(0,0,0,0);return Math.round((d-t)/86400000); }
+  function fmtDate(s) {
+    const d=new Date(s);
+    const days=['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+    const months=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+    return `${days[d.getDay()]} ${d.getDate()} ${months[d.getMonth()]}`;
+  }
+  function rival(m) { return m?(m.home?m.visitor:m.local):''; }
+  function fbKey(n) { return (n||'').replace(/[.#$\[\]\/]/g,'_'); }
+
+  // ═══════════════════════════════════════════════
+  // RENDER: FIXTURE
+  // ═══════════════════════════════════════════════
+  function renderFixture() {
+    const nm=nextMatch(), wrap=document.getElementById('next-match-wrap');
+    if (!nm) {
+      wrap.innerHTML='<div class="empty"><div class="ei">🏆</div><h3>Torneo finalizado</h3><p>Sin próximas fechas programadas.</p></div>';
+    } else {
+      const days=daysUntil(nm.fecha), locked=isLocked(nm);
+      wrap.innerHTML=`
+        <div class="match-hero">
+          <div class="match-kicker">Fecha ${nm.rueda} · ${nm.home?'🏠 Local':'✈️ Visitante'}</div>
+          <div class="match-vs">Los Disidentes</div>
+          <div class="tmuted txs italic" style="margin-bottom:4px;">vs</div>
+          <div class="match-rival">${rival(nm)}</div>
+          <div class="match-meta">
+            <span>📅 ${fmtDate(nm.fecha)}</span>
+            ${nm.hora?`<span>🕐 ${nm.hora}</span>`:''}
+          </div>
+          <div class="countdown-big">${days<=0?(days===0?'¡HOY!':'—'):days}</div>
+          ${days>0?'<div class="countdown-sub">días para el partido</div>':''}
+          <div style="margin-top:18px;">
+            ${locked
+              ?'<div class="lock-banner" style="justify-content:center;">🔒 Asistencia cerrada · Ver Parejas</div>'
+              :`<button class="btn btn-p w100" style="background:rgba(255,255,255,0.15); border:1.5px solid rgba(255,255,255,0.35); color:#fff;" onclick="switchTab('asistencia')">Confirmar asistencia →</button>`}
+          </div>
+        </div>
+
+        <div class="slabel">PRÓXIMAS FECHAS</div>
+        ${ST.fixture.filter(m=>!m.played).slice(1,5).map(m=>`
+          <div class="card" style="padding:12px 16px;">
+            <div class="flex" style="align-items:center;gap:10px;">
+              <span class="chip cx" style="font-family:var(--serif);font-size:.75rem;">F${m.rueda}</span>
+              <span class="flex1 tsm">${rival(m)}</span>
+              <span class="txs tmuted">${fmtDate(m.fecha)}</span>
+              <span class="chip ${m.home?'cg':'co'}">${m.home?'Local':'Visita'}</span>
+            </div>
+          </div>`).join('')}
+      `;
+    }
+
+    const played=ST.fixture.filter(m=>m.played).slice(-4).reverse();
+    const rw=document.getElementById('results-wrap');
+    if(played.length){
+      rw.innerHTML='<div class="slabel">ÚLTIMOS RESULTADOS</div>'+played.map(m=>{
+        const myG=m.home?m.gL:m.gV, thG=m.home?m.gV:m.gL, won=myG>thG;
+        return `<div class="card" style="padding:12px 16px;">
+          <div class="flex" style="align-items:center;gap:10px;">
+            <div style="min-width:48px;text-align:center;">
+              <span class="txs tmuted" style="text-transform:uppercase;letter-spacing:.5px;display:block;">${fmtDate(m.fecha).split(' ').slice(1).join(' ')}</span>
+            </div>
+            <span class="flex1 tsm">vs ${rival(m)} <span class="tmuted txs">(F${m.rueda}${m.home?', L':', V'})</span></span>
+            <span class="result-chip ${won?'win':'loss'}">${myG}–${thG}</span>
+          </div>
+        </div>`;
+      }).join('');
+    }
+  }
+
+  function renderStandings() {
+    const wrap=document.getElementById('standings-wrap');
+    if(!ST.standings.length){wrap.innerHTML='<div class="tcenter tmuted tsm">No disponible</div>';return;}
+    wrap.innerHTML=`
+      <div class="card-title">🏅 Posiciones</div>
+      <table class="stable">
+        <thead><tr><th>#</th><th>Equipo</th><th>Pts</th><th>G</th><th>P</th><th>Dif</th></tr></thead>
+        <tbody>${ST.standings.map(t=>{
+          const me=isMyTeam(t.Equipo||t.equipo||'');
+          const eq=t.Equipo||t.equipo||'', pts=t.Puntos||t.puntos||0;
+          const g=t.Ganados||t.ganados||0, p=t.Perdidos||t.perdidos||0;
+          const dif=t.diferencia??t.Diferencia??0, pos=t.Posicion||t.posicion||'';
+          return `<tr class="${me?'me':''}"><td>${pos}</td><td>${eq}</td><td><strong>${pts}</strong></td><td>${g}</td><td>${p}</td><td>${dif>0?'+':''}${dif}</td></tr>`;
+        }).join('')}</tbody>
+      </table>`;
+  }
+
+  // ═══════════════════════════════════════════════
+  // RENDER: ATTENDANCE
+  // ═══════════════════════════════════════════════
+  function renderAtt() {
+    const wrap=document.getElementById('att-content'), nm=nextMatch();
+    if(!nm){wrap.innerHTML='<div class="empty"><div class="ei">📅</div><h3>Sin partidos</h3><p>No hay fechas próximas.</p></div>';return;}
+    const locked=isLocked(nm), days=daysUntil(nm.fecha);
+    const confNames=Object.entries(ST.attendance).filter(([,v])=>v.status==='confirmed').map(([k])=>k);
+    const decNames =Object.entries(ST.attendance).filter(([,v])=>v.status==='declined').map(([k])=>k);
+    const active=ST.lbf.filter(p=>p.active);
+    const pending=active.filter(p=>!confNames.includes(p.name)&&!decNames.includes(p.name));
+    const myStatus=ST.attendance[ST.player]?.status;
+    const amInLBF=active.some(p=>p.name===ST.player);
+
+    wrap.innerHTML=`
+      <div class="card" style="margin-bottom:12px;">
+        <div class="flex" style="justify-content:space-between;align-items:center;">
+          <div>
+            <div class="fbold fserif" style="font-size:1.05rem;">F${nm.rueda} vs ${rival(nm)}</div>
+            <div class="txs tmuted">${fmtDate(nm.fecha)} · ${nm.home?'Local':'Visita'}</div>
+          </div>
+          <span class="chip ${locked?'cr':'cx'}">${locked?'🔒 Cerrado':`Cierra en ${Math.max(0,days-CFG.lockDays)}d`}</span>
+        </div>
+      </div>
+
+      <div class="att-stats">
+        <div class="att-stat g"><div class="att-stat-n">${confNames.length}</div><div class="att-stat-l">Confirmados</div></div>
+        <div class="att-stat r"><div class="att-stat-n">${decNames.length}</div><div class="att-stat-l">No van</div></div>
+        <div class="att-stat x"><div class="att-stat-n">${pending.length}</div><div class="att-stat-l">Pendientes</div></div>
+      </div>
+
+      ${!locked&&amInLBF?`
+        <div class="card" style="margin-bottom:12px;">
+          <div class="card-title" style="margin-bottom:10px;">Tu confirmación</div>
+          <div class="abtn-pair">
+            <button class="abtn confirm ${myStatus==='confirmed'?'active':''}" onclick="setAtt('confirmed')">✓ Voy</button>
+            <button class="abtn decline ${myStatus==='declined'?'active':''}"  onclick="setAtt('declined')">✗ No puedo</button>
+          </div>
+        </div>` : ''}
+
+      ${locked?'<div class="lock-banner">🔒 La asistencia está cerrada. La formación está en la pestaña Parejas.</div>':''}
+
+      <div class="card">
+        <div class="card-title">Lista del equipo</div>
+        ${!active.length
+          ?'<div class="tmuted tsm tcenter">Cargá jugadores en la pestaña LBF</div>'
+          :active.map((p,i)=>{
+            const st=ST.attendance[p.name]?.status;
+            return `<div class="prow">
+              <div class="pnum">${i+1}</div>
+              <div class="pname flex1">${p.name}</div>
+              <span class="chip ${st==='confirmed'?'cg':st==='declined'?'cr':'cx'}">
+                ${st==='confirmed'?'✓ Va':st==='declined'?'✗ No':'?'}
+              </span>
+            </div>`;
+          }).join('')
+        }
+      </div>
+    `;
+  }
+
+  async function setAtt(status) {
+    const nm=nextMatch();
+    if(!nm||isLocked(nm)){toast('🔒 La asistencia está cerrada');return;}
+    if(!ST.player){toast('Primero ingresá tu nombre');return;}
+    const data={status,ts:Date.now(),player:ST.player};
+    if(ST.fbDb) await ST.fbDb.ref(`attendance/${nm.id}/${fbKey(ST.player)}`).set(data);
+    else{ST.attendance[ST.player]=data;renderAtt();}
+    toast(status==='confirmed'?'✅ ¡Confirmado! Jugamos juntos 🎾':'📝 Registrado. ¡La próxima!');
+    updateAttBadge();
+  }
+
+  function updateAttBadge() {
+    const nm=nextMatch();
+    if(!nm||!ST.player) return;
+    const myStatus=ST.attendance[ST.player]?.status;
+    const badge=document.getElementById('badge-att');
+    if(!myStatus&&ST.lbf.filter(p=>p.active).some(p=>p.name===ST.player)) badge.classList.remove('hidden');
+    else badge.classList.add('hidden');
+  }
+
+  // ═══════════════════════════════════════════════
+  // RENDER: PAREJAS
+  // ═══════════════════════════════════════════════
+  function renderParejas() {
+    const wrap=document.getElementById('parejas-content'), nm=nextMatch();
+    if(!nm){wrap.innerHTML='<div class="empty"><div class="ei">📅</div><h3>Sin partidos</h3></div>';return;}
+
+    const confNames=Object.entries(ST.attendance).filter(([,v])=>v.status==='confirmed').map(([k])=>k);
+    const confirmed=ST.lbf.filter(p=>p.active&&confNames.includes(p.name)).map((p,i)=>({name:p.name,lbfPos:p.lbfPosition||(i+1),mn:i+1}));
+
+    if(ST.formation?.locked){
+      const f=ST.formation;
+      wrap.innerHTML=`
+        <div class="card" style="border-color:var(--green);">
+          <div class="card-title">🔒 Formación confirmada · F${nm.rueda}</div>
+          ${['d1','d2','d3'].map(c=>`
+            <div class="crow">
+              <div class="clabel ${c}">${c.toUpperCase()}</div>
+              <div class="cplayers flex1"><strong>${f[c][0].name}</strong> · <strong>${f[c][1].name}</strong></div>
+              <div class="csum">Σ${f[c+'s']}</div>
+            </div>`).join('')}
+          <div class="txs tmuted mt8">Confirmada por ${f.lockedBy||'—'}</div>
+          <button class="btn btn-d btn-sm w100 mt8" onclick="unlockFormation()">Desbloquear formación</button>
+        </div>`;
+      return;
+    }
+
+    if(confirmed.length<6){
+      wrap.innerHTML=`
+        <div class="card">
+          <div class="card-title">🎾 Parejas · F${nm.rueda} vs ${rival(nm)}</div>
+          <div class="empty" style="padding:20px 0;">
+            <div class="ei">⏳</div>
+            <h3>Esperando confirmaciones</h3>
+            <p>Se necesitan 6 jugadores confirmados.<br>
+            <strong class="tgreen fserif" style="font-size:1.2rem;">${confirmed.length}/6</strong> confirmados</p>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">Confirmados hasta ahora</div>
+          ${confirmed.map(p=>`<div class="prow"><div class="pnum">${p.mn}</div><div class="pname flex1">${p.name}</div><span class="chip cg">✓</span></div>`).join('')}
+        </div>`;
+      return;
+    }
+
+    const formations=suggestFormations(confirmed,5);
+    wrap.innerHTML=`
+      <div class="card">
+        <div class="card-title">✅ Confirmados F${nm.rueda} (${confirmed.length})</div>
+        <div class="txs tmuted" style="margin-bottom:8px;">Renumerados 1–${confirmed.length} por LBF (Art. 19)</div>
+        ${confirmed.map(p=>`<div class="prow"><div class="pnum">${p.mn}</div><div class="pname flex1">${p.name}</div></div>`).join('')}
+        ${confirmed.length>6?`<div class="txs tgrape mt8">⚠️ ${confirmed.length} confirmados — el capitán elige los 6 que juegan.</div>`:''}
+      </div>
+      <div class="slabel">FORMACIONES SUGERIDAS · ART. 13 + HISTORIAL</div>
+      ${formations.map((f,idx)=>`
+        <div class="fcard ${idx===0?'best':''}">
+          <div class="${idx===0?'txs tgreen fbold':'txs tmuted'}" style="margin-bottom:8px;">
+            ${idx===0?'⭐ RECOMENDADA':`Opción ${idx+1}`}
+          </div>
+          ${['d1','d2','d3'].map(c=>{
+            const pair=f[c], sum=f[c+'s'], h=getPairHist(pair[0].name,pair[1].name);
+            return `<div class="crow">
+              <div class="clabel ${c}">${c.toUpperCase()}</div>
+              <div class="cplayers flex1">
+                <strong>${pair[0].name}</strong> · <strong>${pair[1].name}</strong>
+                <small>${h&&h.tot>0?`${h.W}/${h.tot} juntos`:'Sin historial juntos'}</small>
+              </div>
+              <div class="csum">Σ${sum}</div>
+            </div>`;
+          }).join('')}
+          <button class="btn ${idx===0?'btn-p':'btn-o btn-sm'} w100 mt8"
+                  onclick="lockFormation(${idx})">
+            ${idx===0?'🔒 Confirmar esta formación':'Usar esta'}
+          </button>
+        </div>`).join('')}
+      <div class="card mt14">
+        <div class="card-title txs tmuted" style="font-family:var(--sans);font-size:.65rem;text-transform:uppercase;letter-spacing:1px;">📋 Reglamento aplicado</div>
+        <p class="txs tmuted" style="line-height:1.5;">Art. 19: Se renumeran los presentes 1–N por orden de LBF. · Art. 13: D1 = suma más baja, D3 = suma más alta. Empate: D1 tiene el número más bajo.</p>
+      </div>
+    `;
+    wrap._formations=formations;
+  }
+
+  async function lockFormation(idx){
+    const nm=nextMatch(); if(!nm) return;
+    const wrap=document.getElementById('parejas-content');
+    const f=wrap._formations?.[idx]; if(!f) return;
+    const data={
+      d1:f.d1.map(p=>({name:p.name})),d1s:f.d1s,
+      d2:f.d2.map(p=>({name:p.name})),d2s:f.d2s,
+      d3:f.d3.map(p=>({name:p.name})),d3s:f.d3s,
+      locked:true,lockedBy:ST.player,lockedAt:Date.now()
+    };
+    if(ST.fbDb) await ST.fbDb.ref(`formation/${nm.id}`).set(data);
+    else{ST.formation=data;renderParejas();}
+    toast('🔒 ¡Formación confirmada! Jugamos juntos 🎾');
+  }
+
+  async function unlockFormation(){
+    const nm=nextMatch(); if(!nm) return;
+    if(ST.fbDb) await ST.fbDb.ref(`formation/${nm.id}/locked`).set(false);
+    else{if(ST.formation) ST.formation.locked=false; renderParejas();}
+  }
+
+  // ═══════════════════════════════════════════════
+  // RENDER: CHAT
+  // ═══════════════════════════════════════════════
+  function renderChat(){
+    const wrap=document.getElementById('chat-msgs');
+    if(!ST.chat.length){wrap.innerHTML='<div class="empty"><div class="ei">💬</div><h3>El chat está vacío</h3><p>¡Rompé el hielo!</p></div>';return;}
+    const atBottom=wrap.scrollHeight-wrap.scrollTop<=wrap.clientHeight+60;
+    wrap.innerHTML=ST.chat.map(msg=>{
+      const mine=msg.player===ST.player;
+      const d=new Date(msg.ts), time=`${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}`;
+      return `<div class="cmsg ${mine?'mine':''}">
+        ${!mine?`<div class="csender">${msg.player} · ${time}</div>`:''}
+        <div class="cbubble">${esc(msg.text)}</div>
+        ${mine?`<div class="ctime">${time}</div>`:`<div class="ctime other">${time}</div>`}
+      </div>`;
+    }).join('');
+    if(atBottom) wrap.scrollTop=wrap.scrollHeight;
+    const last=ST.chat[ST.chat.length-1];
+    if(last){ST.lastChatSeen=last.ts;localStorage.setItem('lastChatSeen',last.ts);}
+    ST.unreadChat=0; document.getElementById('badge-chat').classList.add('hidden');
+  }
+
+  function esc(s){return(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+  async function sendChat(){
+    const inp=document.getElementById('chat-inp'), text=inp.value.trim();
+    if(!text) return;
+    if(!ST.player){toast('Primero ingresá tu nombre');return;}
+    inp.value='';
+    const msg={player:ST.player,text,ts:Date.now()};
+    if(ST.fbDb) await ST.fbDb.ref('chat').push(msg);
+    else{ST.chat.push({id:String(Date.now()),...msg});renderChat();}
+  }
+
+  // ═══════════════════════════════════════════════
+  // RENDER: RENDIMIENTOS
+  // ═══════════════════════════════════════════════
+  function renderRend(){
+    const wrap=document.getElementById('rend-content');
+    if(!ST.perfLoaded){
+      wrap.innerHTML='<div class="tcenter" style="padding:28px"><span class="spin"></span><div class="txs tmuted mt8">Analizando partidos…</div></div>';
+      loadPerformances(); return;
+    }
+    if(!ST.perfs.length){wrap.innerHTML='<div class="empty"><div class="ei">📊</div><h3>Sin datos aún</h3><p>Los stats aparecen cuando se carguen los resultados del torneo.</p></div>';return;}
+    const pc=p=>p>=70?'var(--green)':p>=50?'var(--lime)':'var(--grape)';
+    const pcl=p=>p>=70?'high':p>=50?'mid':'low';
+    wrap.innerHTML=`
+      <div class="card">
+        <div class="card-title">🏆 Rendimiento individual</div>
+        ${ST.perfs.map((p,i)=>`
+          <div class="perf-row">
+            <div class="perf-rank ${i<3?'top':''}">${i+1}</div>
+            <div class="flex1">
+              <div class="perf-name">${p.name}</div>
+              <div class="perf-sub">${p.W} victorias · ${p.L} derrotas · ${p.total} partidos</div>
+            </div>
+            <div class="pbar-w"><div class="pbar ${pcl(p.pct)}" style="width:${p.pct}%"></div></div>
+            <div class="ppct" style="color:${pc(p.pct)}">${p.pct}%</div>
+          </div>`).join('')}
+      </div>
+      <div class="card">
+        <div class="card-title">🎾 Por cancha</div>
+        ${ST.perfs.map(p=>{
+          const courts=[1,2,3].map(c=>{const w=p.cW[c]||0,l=p.cL[c]||0,t=w+l;return t>0?`<span class="chip cx txs">D${c} ${w}/${t}</span>`:''}).filter(Boolean).join(' ');
+          return courts?`<div class="prow"><div class="pname flex1">${p.name}</div><div style="display:flex;gap:4px;flex-wrap:wrap;">${courts}</div></div>`:'';
+        }).filter(Boolean).join('')}
+      </div>
+      <div class="card">
+        <div class="card-title">🤝 Mejores duplas</div>
+        ${ST.perfs.map(p=>{
+          const best=Object.entries(p.pairs||{}).map(([n,r])=>({n,pct:r.W+r.L>0?Math.round(r.W/(r.W+r.L)*100):0,tot:r.W+r.L})).filter(x=>x.tot>=2).sort((a,b)=>b.pct-a.pct)[0];
+          if(!best) return '';
+          return `<div class="perf-row"><div class="perf-name flex1 tsm">${p.name} + ${best.n}</div><div class="ppct" style="color:${pc(best.pct)}">${best.pct}%</div></div>`;
+        }).filter(Boolean).join('')}
+      </div>
+    `;
+  }
+
+  // ═══════════════════════════════════════════════
+  // RENDER: LBF
+  // ═══════════════════════════════════════════════
+  function renderLBF(){
+    const wrap=document.getElementById('lbf-list');
+    if(!ST.lbf.length){wrap.innerHTML='<div class="tmuted tsm tcenter" style="padding:10px;">Lista vacía.</div>';return;}
+    wrap.innerHTML=ST.lbf.map((p,i)=>`
+      <div class="lbf-item" data-idx="${i}" draggable="true"
+           ondragstart="lbfDS(event,${i})" ondragover="lbfDO(event)"
+           ondrop="lbfDrop(event,${i})" ondragend="lbfDE()">
+        <span class="drag-handle">⠿</span>
+        <div class="pnum">${i+1}</div>
+        <div class="pname flex1">${p.name}</div>
+        <label style="cursor:pointer;display:flex;align-items:center;gap:5px;" class="txs tmuted">
+          <input type="checkbox" ${p.active?'checked':''} onchange="toggleLBF(${i})" style="cursor:pointer;">
+          Activo
+        </label>
+        <button onclick="removeLBF(${i})"
+          style="border:none;background:none;color:var(--muted);cursor:pointer;font-size:1.1rem;padding:0 4px;line-height:1;transition:color .2s;"
+          onmouseover="this.style.color='var(--grape)'" onmouseout="this.style.color='var(--muted)'">×</button>
+      </div>`).join('');
+  }
+
+  let _di=null;
+  function lbfDS(e,i){_di=i;e.dataTransfer.effectAllowed='move';}
+  function lbfDO(e){e.preventDefault();}
+  function lbfDE(){_di=null;}
+  function lbfDrop(e,to){
+    e.preventDefault(); if(_di===null||_di===to) return;
+    const arr=[...ST.lbf],[moved]=arr.splice(_di,1);
+    arr.splice(to,0,moved); arr.forEach((p,i)=>p.lbfPosition=i+1);
+    ST.lbf=arr; saveLBF(); renderLBF();
+  }
+  function toggleLBF(i){ST.lbf[i].active=!ST.lbf[i].active;saveLBF();}
+  function removeLBF(i){if(!confirm(`Eliminar a ${ST.lbf[i].name}?`))return;ST.lbf.splice(i,1);ST.lbf.forEach((p,x)=>p.lbfPosition=x+1);saveLBF();renderLBF();}
+  function addLBFPlayer(){
+    const inp=document.getElementById('lbf-new-inp'), name=inp.value.trim().toUpperCase();
+    if(!name) return;
+    if(ST.lbf.find(p=>p.name.toUpperCase()===name)){toast('⚠️ Ya está en la lista');return;}
+    ST.lbf.push({name,active:true,lbfPosition:ST.lbf.length+1});
+    inp.value=''; saveLBF(); renderLBF();
+  }
+  function saveLBF(){localStorage.setItem('lbf',JSON.stringify(ST.lbf));if(ST.fbDb)ST.fbDb.ref('lbf').set(ST.lbf);}
+
+  // ═══════════════════════════════════════════════
+  // NAVIGATION
+  // ═══════════════════════════════════════════════
+  function switchTab(tab){
+    ST.activeTab=tab;
+    document.querySelectorAll('.tab').forEach(el=>el.classList.remove('active'));
+    document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+    document.getElementById(`tab-${tab}`).classList.add('active');
+    document.querySelector(`[data-tab="${tab}"]`).classList.add('active');
+    if(tab==='asistencia') renderAtt();
+    if(tab==='parejas') renderParejas();
+    if(tab==='rendimientos'&&!ST.perfLoaded) renderRend();
+    if(tab==='lbf') renderLBF();
+    if(tab==='chat'){
+      renderChat();
+      document.getElementById('badge-chat').classList.add('hidden');
+      ST.unreadChat=0;
+      setTimeout(()=>{const m=document.getElementById('chat-msgs');m.scrollTop=m.scrollHeight;},50);
+    }
+  }
+
+  // ═══════════════════════════════════════════════
+  // PLAYER NAME
+  // ═══════════════════════════════════════════════
+  function setPlayerName(){
+    const inp=document.getElementById('pname-inp'), n=inp.value.trim().toUpperCase();
+    if(!n||n.length<2){toast('Mínimo 2 caracteres');return;}
+    ST.player=n; localStorage.setItem('playerName',n);
+    document.getElementById('player-badge-txt').textContent=n;
+    document.getElementById('modal-player').classList.add('hidden');
+    updateAttBadge();
+  }
+  function changePlayer(){
+    const n=prompt('Cambiar nombre:',ST.player||'');
+    if(n&&n.trim().length>=2){
+      ST.player=n.trim().toUpperCase();
+      localStorage.setItem('playerName',ST.player);
+      document.getElementById('player-badge-txt').textContent=ST.player;
+      toast(`✅ Sos ${ST.player}`);
+    }
+  }
+
+  // ═══════════════════════════════════════════════
+  // INIT
+  // ═══════════════════════════════════════════════
+  async function init(){
+    if(ST.player){
+      document.getElementById('player-badge-txt').textContent=ST.player;
+      document.getElementById('modal-player').classList.add('hidden');
+    }
+    document.getElementById('camp-id-inp').value=CFG.campId;
+    if(ST.fixture.length) renderFixture();
+    if(ST.standings.length) renderStandings();
+    initFirebase();
+    await Promise.all([loadFixture(),loadStandings()]);
+    updateAttBadge(); renderLBF();
+  }
+
+  document.addEventListener('DOMContentLoaded', init);
+  </script>
+</body>
+</html>
