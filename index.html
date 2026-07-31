@@ -708,6 +708,18 @@
       </div>
       <p class="txs tmuted mt8">2151 = Cuarta · 2154 = 5ᵃB Zona 1 · 2155 = 5ᵃB Zona 2</p>
     </div>
+
+    <!-- INSTALAR APP — siempre visible si no está instalada -->
+    <div class="card" id="install-card">
+      <div class="card-title">📲 Instalá la app</div>
+      <p class="tsm tmuted" style="margin-bottom:14px; line-height:1.6;">
+        Instalala en tu celular para acceder rápido desde la pantalla de inicio, sin abrir el navegador.
+      </p>
+      <button class="btn btn-p btn-full" id="install-card-btn" onclick="installApp()" style="font-size:1rem; padding:13px;">
+        📲 Instalar en mi celular
+      </button>
+      <p class="txs tmuted tcenter mt8" id="install-card-hint" style="line-height:1.5;"></p>
+    </div>
   </section>
 
   <!-- ════════ MODAL: LOGIN / REGISTRO ════════ -->
@@ -2172,7 +2184,7 @@
     if (tab==='asistencia')                            renderAtt();
     if (tab==='parejas')                               renderParejas();
     if (tab==='rendimientos' && !ST.perfLoaded)        renderRend();
-    if (tab==='lbf') { _historyLoaded = false; renderLBF(); if(ST.isAdmin && ST.fbDb) renderAdmin(); }
+    if (tab==='lbf') { _historyLoaded = false; renderLBF(); if(ST.isAdmin && ST.fbDb) renderAdmin(); updateInstallCard(); }
     if (tab==='chat') {
       renderChat();
       document.getElementById('badge-chat').classList.add('hidden');
@@ -2417,9 +2429,29 @@
   }
 
   function showInstallBar() {
-    if (isStandalone()) return; // ya está instalada
-    if (localStorage.getItem('installDismissed') === '1') return;
+    if (isStandalone()) return;
+    if (sessionStorage.getItem('installDismissed') === '1') return; // solo oculto por sesión
     document.getElementById('install-bar').style.display = 'flex';
+  }
+
+  function updateInstallCard() {
+    const card = document.getElementById('install-card');
+    const hint = document.getElementById('install-card-hint');
+    if (!card) return;
+    if (isStandalone()) {
+      // Ya instalada — ocultar card
+      card.style.display = 'none';
+      return;
+    }
+    card.style.display = 'block';
+    if (isIOS()) {
+      hint.textContent = 'En iPhone: tocá ⬆️ Compartir → "Agregar a pantalla de inicio"';
+    } else if (_installPrompt) {
+      hint.textContent = 'Tocá el botón y confirmá en el cuadro que aparece.';
+    } else {
+      // Chrome ya procesó el prompt (quizás ya instalada, o navegador no compatible)
+      hint.innerHTML = 'Si no funciona el botón, usá el menú de Chrome ⋮ → "Agregar a pantalla de inicio".';
+    }
   }
 
   function installApp() {
@@ -2430,14 +2462,20 @@
     if (_installPrompt) {
       _installPrompt.prompt();
       _installPrompt.userChoice.then(r => {
-        if (r.outcome === 'accepted') hideInstallBar();
+        if (r.outcome === 'accepted') {
+          hideInstallBar();
+          updateInstallCard();
+        }
         _installPrompt = null;
       });
+    } else {
+      // Fallback: instrucciones manuales via toast
+      toast('Usá el menú ⋮ del navegador → "Agregar a pantalla de inicio"', 4000);
     }
   }
 
   function dismissInstall() {
-    localStorage.setItem('installDismissed', '1');
+    sessionStorage.setItem('installDismissed', '1'); // solo esta sesión
     hideInstallBar();
   }
 
@@ -2450,12 +2488,14 @@
     e.preventDefault();
     _installPrompt = e;
     showInstallBar();
+    updateInstallCard();
   });
 
   // Ocultar si se instala exitosamente
   window.addEventListener('appinstalled', () => {
     hideInstallBar();
     _installPrompt = null;
+    updateInstallCard();
     toast('✅ ¡App instalada! Ya la tenés en tu pantalla de inicio.', 3500);
   });
 
@@ -2463,6 +2503,9 @@
   if (isIOS() && !isStandalone()) {
     window.addEventListener('load', () => setTimeout(showInstallBar, 1500));
   }
+
+  // Actualizar card al cargar la LBF tab
+  window.addEventListener('load', () => setTimeout(updateInstallCard, 500));
 
   // ═══════════════════════════════════════════
   // SERVICE WORKER — PWA + DETECCIÓN DE UPDATES
