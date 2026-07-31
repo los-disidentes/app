@@ -761,6 +761,14 @@
         ¿Primera vez? Completá tu nombre, apellido y elegí un PIN de 4 dígitos.<br>
         La próxima vez usá el mismo nombre y PIN para identificarte.
       </p>
+
+      <!-- Botón instalar — solo si no está instalada -->
+      <div id="login-install-wrap" style="display:none; margin-top:14px; padding-top:14px; border-top:1px solid var(--line);">
+        <button onclick="installApp()" style="width:100%;background:none;border:2px solid var(--green);color:var(--green);border-radius:10px;padding:11px;font-size:0.88rem;font-weight:700;cursor:pointer;font-family:var(--sans);display:flex;align-items:center;justify-content:center;gap:8px;">
+          <span>📲</span><span>Instalá la app en tu celular</span>
+        </button>
+        <p id="login-install-hint" class="txs tmuted tcenter mt8" style="line-height:1.5;"></p>
+      </div>
     </div>
   </div>
 
@@ -2435,22 +2443,30 @@
   }
 
   function updateInstallCard() {
-    const card = document.getElementById('install-card');
-    const hint = document.getElementById('install-card-hint');
-    if (!card) return;
-    if (isStandalone()) {
-      // Ya instalada — ocultar card
-      card.style.display = 'none';
-      return;
-    }
-    card.style.display = 'block';
-    if (isIOS()) {
-      hint.textContent = 'En iPhone: tocá ⬆️ Compartir → "Agregar a pantalla de inicio"';
-    } else if (_installPrompt) {
-      hint.textContent = 'Tocá el botón y confirmá en el cuadro que aparece.';
-    } else {
-      // Chrome ya procesó el prompt (quizás ya instalada, o navegador no compatible)
-      hint.innerHTML = 'Si no funciona el botón, usá el menú de Chrome ⋮ → "Agregar a pantalla de inicio".';
+    const card     = document.getElementById('install-card');
+    const hint     = document.getElementById('install-card-hint');
+    const loginWrap= document.getElementById('login-install-wrap');
+    const loginHint= document.getElementById('login-install-hint');
+
+    const installed = isStandalone();
+
+    // Card en LBF
+    if (card) card.style.display = installed ? 'none' : 'block';
+
+    // Botón en modal de login
+    if (loginWrap) loginWrap.style.display = installed ? 'none' : 'block';
+
+    if (!installed) {
+      let hintText;
+      if (isIOS()) {
+        hintText = 'En iPhone: tocá ⬆️ Compartir → "Agregar a pantalla de inicio"';
+      } else if (_installPrompt) {
+        hintText = 'Tocá el botón y confirmá en el cuadro que aparece.';
+      } else {
+        hintText = 'Menú ⋮ del navegador → "Agregar a pantalla de inicio"';
+      }
+      if (hint)      hint.textContent      = hintText;
+      if (loginHint) loginHint.textContent = hintText;
     }
   }
 
