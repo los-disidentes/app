@@ -674,15 +674,20 @@
              onerror="this.style.display='none'">
       </div>
       <div class="modal-title">Los Disidentes</div>
-      <div class="modal-sub">Ingresá tu nombre y PIN</div>
+      <div class="modal-sub">Ingresá tus datos y PIN</div>
 
-      <!-- Nombre -->
-      <input class="inp" id="pname-inp" placeholder="Tu nombre (ej: PABLO)" maxlength="30"
-             list="lbf-names-list" autocomplete="off"
-             style="text-transform:uppercase;"
-             oninput="this.value=this.value.toUpperCase()"
-             onkeypress="if(event.key==='Enter') document.getElementById('pin-0').focus()">
-      <datalist id="lbf-names-list"></datalist>
+      <!-- Nombre + Apellido -->
+      <div style="display:flex; gap:8px;">
+        <input class="inp" id="pname-first" placeholder="Nombre" maxlength="20"
+               autocomplete="off" style="text-transform:uppercase; margin-bottom:0; flex:1;"
+               oninput="this.value=this.value.toUpperCase().replace(/[^A-ZÁÉÍÓÚÜÑ ]/gi,'')"
+               onkeypress="if(event.key==='Enter') document.getElementById('pname-last').focus()">
+        <input class="inp" id="pname-last" placeholder="Apellido" maxlength="30"
+               autocomplete="off" style="text-transform:uppercase; margin-bottom:0; flex:1;"
+               oninput="this.value=this.value.toUpperCase().replace(/[^A-ZÁÉÍÓÚÜÑ ]/gi,'')"
+               onkeypress="if(event.key==='Enter') document.getElementById('pin-0').focus()">
+      </div>
+      <div style="height:8px;"></div>
 
       <!-- PIN -->
       <div class="pin-label">PIN de 4 dígitos</div>
@@ -696,8 +701,8 @@
 
       <button class="btn btn-p w100" id="auth-btn" onclick="tryLogin()">Entrar al equipo 🎾</button>
       <p class="txs tmuted tcenter mt8" style="line-height:1.5;">
-        ¿Primera vez? Ingresá tu nombre y elegí un PIN de 4 dígitos.<br>
-        Próximas veces usá el mismo PIN para identificarte.
+        ¿Primera vez? Completá tu nombre, apellido y elegí un PIN de 4 dígitos.<br>
+        La próxima vez usá el mismo nombre y PIN para identificarte.
       </p>
     </div>
   </div>
@@ -816,13 +821,16 @@
   }
 
   async function tryLogin() {
-    const name  = normalizeName(document.getElementById('pname-inp').value);
+    const firstName = normalizeName(document.getElementById('pname-first').value);
+    const lastName  = normalizeName(document.getElementById('pname-last').value);
+    const name  = firstName && lastName ? `${firstName} ${lastName}` : normalizeName(firstName || lastName);
     const pin   = getPin();
     const errEl = document.getElementById('auth-error');
     const btn   = document.getElementById('auth-btn');
 
-    if (!name || name.length < 2) { errEl.textContent = '⚠️ Ingresá tu nombre'; return; }
-    if (pin.length !== 4)          { errEl.textContent = '⚠️ PIN debe ser 4 dígitos'; document.getElementById('pin-0').focus(); return; }
+    if (!firstName || firstName.length < 2) { errEl.textContent = '⚠️ Ingresá tu nombre'; document.getElementById('pname-first').focus(); return; }
+    if (!lastName  || lastName.length  < 2) { errEl.textContent = '⚠️ Ingresá tu apellido'; document.getElementById('pname-last').focus(); return; }
+    if (pin.length !== 4)                    { errEl.textContent = '⚠️ PIN debe ser 4 dígitos'; document.getElementById('pin-0').focus(); return; }
 
     errEl.textContent = '';
     btn.textContent = 'Verificando…'; btn.disabled = true;
@@ -900,7 +908,12 @@
     ST.playerPin = pin;
     localStorage.setItem('playerName', name);
     localStorage.setItem('playerPin',  pin);
-    document.getElementById('player-badge-txt').textContent = name;
+    // Badge: mostrar nombre completo, pero si es muy largo solo el primer nombre
+    const parts = name.split(' ');
+    const badgeText = parts.length >= 2 && name.length > 16
+      ? parts[0] + ' ' + parts[parts.length-1].charAt(0) + '.'
+      : name;
+    document.getElementById('player-badge-txt').textContent = badgeText;
     document.getElementById('modal-player').classList.add('hidden');
     checkAdmin();
     updateAttBadge();
@@ -910,9 +923,17 @@
   // ═══════════════════════════════════════════
   // ADMIN
   // ═══════════════════════════════════════════
+  // Helper: ¿es el admin principal (por nombre de pila)?
+  function isBootstrapAdmin() {
+    if (!ST.player) return false;
+    const firstWord = normalizeName(ST.player).split(' ')[0];
+    return ST.player === CFG.bootstrapAdmin || firstWord === CFG.bootstrapAdmin;
+  }
+
   function checkAdmin() {
-    // Bootstrap: el nombre configurado en CFG siempre es admin
-    if (ST.player === CFG.bootstrapAdmin) {
+    // Bootstrap: soporta nombre simple "PABLO" y con apellido "PABLO JABALOYAS"
+    const firstWord = normalizeName(ST.player || '').split(' ')[0];
+    if (ST.player === CFG.bootstrapAdmin || firstWord === CFG.bootstrapAdmin) {
       ST.isAdmin = true;
       applyAdminUI();
       return;
@@ -1004,7 +1025,8 @@
       await ST.fbDb.ref(`config/admins/${key}`).set(true);
       toast(`👑 ${name} es ahora administrador`);
     } else {
-      if (name === CFG.bootstrapAdmin) { toast('⚠️ No podés quitar los permisos del admin principal'); return; }
+      const nameFirst = normalizeName(name).split(' ')[0];
+      if (name === CFG.bootstrapAdmin || nameFirst === CFG.bootstrapAdmin) { toast('⚠️ No podés quitar los permisos del admin principal'); return; }
       await ST.fbDb.ref(`config/admins/${key}`).remove();
       toast(`✅ ${name} ya no es administrador`);
     }
@@ -1314,7 +1336,7 @@
     return `${days[d.getDay()]} ${d.getDate()} ${months[d.getMonth()]}`;
   }
   function rival(m) { return m?(m.home?m.visitor:m.local):''; }
-  function fbKey(n)  { return (n||'').replace(/[.#$\[\]\/]/g,'_'); }
+  function fbKey(n)  { return (n||'').trim().replace(/[.#$\[\]\/ ]/g,'_'); }
   function esc(s)    { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
   // ═══════════════════════════════════════════
@@ -1685,7 +1707,7 @@
     // Botón cerrar LBF: solo admin + lista abierta + hay jugadores
     if (lockRow) lockRow.style.display = (isAdmin && !locked && ST.lbf.length > 0) ? 'block' : 'none';
     // Botón desbloquear emergencia: solo bootstrap admin
-    if (unlockRow) unlockRow.style.display = (ST.player === CFG.bootstrapAdmin && locked) ? 'block' : 'none';
+    if (unlockRow) unlockRow.style.display = (isBootstrapAdmin() && locked) ? 'block' : 'none';
 
     if (!ST.lbf.length) {
       wrap.innerHTML = '<div class="tmuted tsm tcenter" style="padding:10px;">Lista vacía — el admin debe agregar jugadores en el orden oficial de la LBF.</div>';
@@ -1753,7 +1775,7 @@
   }
 
   async function unlockLBF() {
-    if (ST.player !== CFG.bootstrapAdmin) return;
+    if (!isBootstrapAdmin()) return;
     if (!confirm('⚠️ EMERGENCIA: ¿Desbloquear la LBF?\nUsalo solo si hubo un error en la carga inicial.')) return;
     if (ST.fbDb) await ST.fbDb.ref('config/lbfLocked').set(false);
     ST.lbfLocked = false;
@@ -2033,7 +2055,11 @@
   async function init() {
     // Auto-login si hay sesión guardada
     if (ST.player && ST.playerPin) {
-      document.getElementById('player-badge-txt').textContent = ST.player;
+      const _parts = ST.player.split(' ');
+      const _badge = _parts.length >= 2 && ST.player.length > 16
+        ? _parts[0] + ' ' + _parts[_parts.length-1].charAt(0) + '.'
+        : ST.player;
+      document.getElementById('player-badge-txt').textContent = _badge;
       document.getElementById('modal-player').classList.add('hidden');
     }
 
