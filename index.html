@@ -423,6 +423,10 @@
     <div class="slabel">TABLA DE POSICIONES</div>
     <div class="card" id="standings-wrap"><div class="tcenter tmuted tsm" style="padding:10px">Cargando…</div></div>
     <div id="results-wrap"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 4px 16px;gap:10px;">
+      <span id="last-fetch-label" style="font-size:0.68rem;color:var(--muted);"></span>
+      <button class="btn btn-o btn-sm" onclick="refreshData()">🔄 Actualizar datos</button>
+    </div>
   </section>
 
   <!-- ════════ ASISTENCIA ════════ -->
@@ -614,6 +618,7 @@
     unreadChat:   0,
     lastChatSeen: parseInt(localStorage.getItem('lastChatSeen') || '0'),
     perfLoaded:   false,
+    lastFetch:    parseInt(localStorage.getItem('lastFetch') || '0'),
   };
 
   // ═══════════════════════════════════════════
@@ -1035,6 +1040,9 @@
         });
       });
     });
+    const newPlayed = matches.filter(m=>m.played).length;
+    const oldPlayed = ST.fixture.filter(m=>m.played).length;
+    if (newPlayed !== oldPlayed) { ST.perfLoaded = false; ST.perfs = []; } // nuevo resultado → recalcular stats
     ST.fixture = matches.sort((a,b) => new Date(a.fecha)-new Date(b.fecha));
     localStorage.setItem('fixture', JSON.stringify(ST.fixture));
     renderFixture();
@@ -1047,6 +1055,22 @@
     ST.standings = data;
     localStorage.setItem('standings', JSON.stringify(data));
     renderStandings();
+  }
+
+  async function refreshData(showFeedback = true) {
+    if (showFeedback) showToast('🔄 Actualizando datos de la liga…', 2000);
+    await Promise.all([loadFixture(), loadStandings()]);
+    ST.lastFetch = Date.now();
+    localStorage.setItem('lastFetch', ST.lastFetch);
+    updateRefreshLabel();
+    if (showFeedback) showToast('✅ Datos actualizados', 2000);
+  }
+
+  function updateRefreshLabel() {
+    const el = document.getElementById('last-fetch-label');
+    if (!el || !ST.lastFetch) return;
+    const diff = Math.round((Date.now() - ST.lastFetch) / 60000);
+    el.textContent = diff < 1 ? 'Actualizado hace un momento' : `Actualizado hace ${diff} min`;
   }
 
   async function loadPerformances() {
@@ -1655,6 +1679,7 @@
     document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
     document.getElementById(`tab-${tab}`).classList.add('active');
     document.querySelector(`[data-tab="${tab}"]`).classList.add('active');
+    if (tab==='fixture')                               updateRefreshLabel();
     if (tab==='asistencia')                            renderAtt();
     if (tab==='parejas')                               renderParejas();
     if (tab==='rendimientos' && !ST.perfLoaded)        renderRend();
@@ -1684,12 +1709,27 @@
     initFirebase();
 
     await Promise.all([loadFixture(), loadStandings()]);
+    ST.lastFetch = Date.now();
+    localStorage.setItem('lastFetch', ST.lastFetch);
+    updateRefreshLabel();
     updateAttBadge();
     renderLBF();
     updateLBFDatalist();
 
     // Verificar admin si ya tenemos sesión y Firebase
     if (ST.player && ST.fbDb) checkAdmin();
+
+    // Auto-refresh cada 4 horas
+    const FOUR_HOURS = 4 * 60 * 60 * 1000;
+    setInterval(() => refreshData(false), FOUR_HOURS);
+
+    // Refresh al volver a la app (usuario cambia de pestaña/app y regresa)
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        updateRefreshLabel();
+        if (Date.now() - ST.lastFetch > FOUR_HOURS) refreshData(false);
+      }
+    });
   }
 
   document.addEventListener('DOMContentLoaded', init);
