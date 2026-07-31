@@ -18,6 +18,7 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,400;0,600;0,700;1,600;1,700&family=Lato:wght@400;700&display=swap">
   <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
 
   <style>
     /* ── VARIABLES ─────────────────────────────── */
@@ -1328,7 +1329,38 @@
     if (!url) { setStatus(false, 'Sin Firebase — datos locales'); return; }
     try {
       let app;
-      try { app = firebase.app(); } catch(_) { app = firebase.initializeApp({ databaseURL: url }); }
+      try { app = firebase.app(); } catch(_) {
+        app = firebase.initializeApp({
+          apiKey:            'AIzaSyAXTg_4GKgJrkculLJofd-zHakKT2UTw14',
+          authDomain:        'los-disidentes-app.firebaseapp.com',
+          databaseURL:       url,
+          projectId:         'los-disidentes-app',
+          storageBucket:     'los-disidentes-app.firebasestorage.app',
+          messagingSenderId: '658281523905',
+          appId:             '1:658281523905:web:d46d80c740dd2b86d20240',
+        });
+      }
+      // BUG-01: autenticar anónimamente antes de abrir listeners de DB
+      // Esto permite reglas Firebase con auth != null sin cambiar la UX
+      firebase.auth().onAuthStateChanged(user => {
+        if (!user) {
+          firebase.auth().signInAnonymously().catch(err => {
+            console.warn('Firebase anonymous auth failed:', err.code);
+            // Si falla (auth no habilitado aún), igual continuar con DB abierta
+            _initFirebaseDb();
+          });
+        } else {
+          _initFirebaseDb();
+        }
+      });
+    } catch(e) {
+      console.error('Firebase init error:', e);
+      setStatus(false, 'Error al conectar Firebase');
+    }
+  }
+
+  function _initFirebaseDb() {
+    try {
       ST.fbDb = firebase.database();
       ST.fbDb.ref('.info/connected').on('value', s => {
         const ok = s.val() === true;
