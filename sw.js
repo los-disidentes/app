@@ -1,5 +1,5 @@
-// Service Worker — Los Disidentes App v17
-const CACHE = 'disidentes-v17';
+// Service Worker — Los Disidentes App v18
+const CACHE = 'disidentes-v18';
 const PRECACHE = [
   '/app/',
   '/app/index.html',

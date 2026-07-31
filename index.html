@@ -53,6 +53,9 @@
       -moz-osx-font-smoothing: grayscale;
     }
     ::selection { background: var(--green); color: #fff; }
+    /* Skip link — visible solo al tabular (accesibilidad) */
+    .skip-link { position:absolute; top:-100%; left:8px; padding:6px 12px; background:var(--green-dk); color:#fff; border-radius:0 0 6px 6px; font-size:0.82rem; font-weight:600; text-decoration:none; z-index:9999; transition:top .15s; }
+    .skip-link:focus { top:0; }
 
     /* ── STATUS BAR ─────────────────────────────── */
     #status-bar {
@@ -615,7 +618,12 @@
     <button class="nav-btn"        data-tab="galeria"      onclick="switchTab('galeria')">      <span class="ni">📷</span>Fotos</button>
   </nav>
 
-  <!-- ════════ FIXTURE ════════ -->
+  <!-- SKIP LINK (accesibilidad — lectores de pantalla) -->
+  <a href="#tab-content" class="skip-link">Saltar al contenido</a>
+
+  <main id="tab-content" aria-label="Contenido principal">
+
+  <!-- FIXTURE -->
   <section id="tab-fixture" class="tab active">
     <div id="next-match-wrap"><div class="tcenter" style="padding:28px"><span class="spin"></span></div></div>
     <div class="slabel">TABLA DE POSICIONES</div>
@@ -780,7 +788,9 @@
     </div>
   </section>
 
-  <!-- ════════ MODAL: LOGIN / REGISTRO ════════ -->
+  </main><!-- /#tab-content -->
+
+  <!-- MODAL: LOGIN / REGISTRO -->
   <div class="modal-ov" id="modal-player">
     <div class="modal-box">
       <div class="tcenter" style="margin-bottom:16px;">
@@ -2011,15 +2021,22 @@
   }
 
   async function sendChat() {
-    const inp=document.getElementById('chat-inp'), text=inp.value.trim();
+    const inp = document.getElementById('chat-inp');
+    const btn = document.querySelector('.chat-send');
+    const text = inp.value.trim();
     if (!text) return;
     if (!ST.player) { toast('Iniciá sesión para chatear'); return; }
-    // BUG-10: limitar longitud del mensaje
     if (text.length > 500) { toast('⚠️ El mensaje no puede superar los 500 caracteres'); return; }
+    // Anti-doble-click
+    if (btn) { btn.disabled = true; }
     inp.value = '';
     const msg = { player: ST.player, text, ts: Date.now() };
-    if (ST.fbDb) await ST.fbDb.ref('chat').push(msg);
-    else { ST.chat.push({id: String(Date.now()), ...msg}); renderChat(); }
+    try {
+      if (ST.fbDb) await ST.fbDb.ref('chat').push(msg);
+      else { ST.chat.push({id: String(Date.now()), ...msg}); renderChat(); }
+    } finally {
+      if (btn) { btn.disabled = false; }
+    }
   }
 
   // ═══════════════════════════════════════════
@@ -2189,25 +2206,31 @@
     ST.lbf.splice(i,1); ST.lbf.forEach((p,x)=>p.lbfPosition=x+1);
     saveLBF(); renderLBF();
   }
+  let _addingLBF = false;
   async function addLBFPlayer(){
     if(!ST.isAdmin){toast('Solo el admin puede agregar jugadores');return;}
+    if(_addingLBF) return; // anti-doble-click
     const inp=document.getElementById('lbf-new-inp'), name=inp.value.trim().toUpperCase();
     if(!name){return;}
     if(ST.lbf.find(p=>p.name.toUpperCase()===name)){toast('⚠️ Ya está en la lista');return;}
-    // Validar que esté registrado en la app
-    if(ST.fbDb){
-      const allSnap = await ST.fbDb.ref('players').once('value');
-      const allPlayers = Object.values(allSnap.val()||{});
-      const registered = allPlayers.find(p => normalizeName(p.name)===normalizeName(name));
-      if(!registered){
-        toast(`⚠️ "${name}" no está registrado en la app. Primero debe registrarse.`);
-        return;
+    _addingLBF = true;
+    try {
+      if(ST.fbDb){
+        const allSnap = await ST.fbDb.ref('players').once('value');
+        const allPlayers = Object.values(allSnap.val()||{});
+        const registered = allPlayers.find(p => normalizeName(p.name)===normalizeName(name));
+        if(!registered){
+          toast(`⚠️ "${name}" no está registrado en la app. Primero debe registrarse.`);
+          return;
+        }
       }
+      const pos = ST.lbf.length+1;
+      ST.lbf.push({name,active:true,lbfPosition:pos});
+      if(ST.lbfLocked) toast(`✅ ${name} agregado al final de la LBF (posición ${pos})`);
+      inp.value=''; saveLBF(); renderLBF(); updateLBFDatalist();
+    } finally {
+      _addingLBF = false;
     }
-    const pos = ST.lbf.length+1;
-    ST.lbf.push({name,active:true,lbfPosition:pos});
-    if(ST.lbfLocked) toast(`✅ ${name} agregado al final de la LBF (posición ${pos})`);
-    inp.value=''; saveLBF(); renderLBF(); updateLBFDatalist();
   }
   async function loadRegisteredPlayersDatalist(){
     if(!ST.fbDb) return;
