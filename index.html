@@ -477,7 +477,7 @@
       <div id="lbf-locked-banner" style="display:none;">
         <div style="background:rgba(28,91,58,0.08);border:1px solid rgba(28,91,58,0.25);border-radius:8px;padding:9px 14px;margin-bottom:10px;font-size:0.78rem;color:var(--green);line-height:1.5;">
           🔒 <strong>LBF cerrada</strong> — El orden está fijo para el torneo (Art. 13/19).<br>
-          Activá o desactivá jugadores según quién juega cada partido.
+          Activá/desactivá jugadores por partido. El admin puede agregar o quitar jugadores si alguien entra o sale del equipo.
         </div>
       </div>
 
@@ -486,10 +486,12 @@
       </p>
       <div id="lbf-list"></div>
 
-      <!-- Solo visible para admin, solo si NO está bloqueada -->
+      <!-- Solo visible para admin (abierta o cerrada) -->
       <div class="flex gap8 mt8" id="lbf-add-row" style="display:none;">
-        <input class="inp flex1" id="lbf-new-inp" placeholder="Nombre del jugador" style="margin:0"
+        <input class="inp flex1" id="lbf-new-inp" placeholder="Nombre del jugador (debe estar registrado)"
+               style="margin:0" list="registered-players-list"
                onkeypress="if(event.key==='Enter') addLBFPlayer()">
+        <datalist id="registered-players-list"></datalist>
         <button class="btn btn-p btn-sm" onclick="addLBFPlayer()">+ Agregar</button>
       </div>
 
@@ -512,6 +514,9 @@
         </button>
       </div>
     </div>
+
+    <!-- Combinaciones de canchas basadas en activos de la LBF -->
+    <div id="lbf-combos-wrap"></div>
 
     <!-- Panel Admin — solo visible para admin -->
     <div class="card" id="admin-card" style="display:none;">
@@ -1553,8 +1558,8 @@
     if (openBanner)   openBanner.style.display   = (isAdmin && !locked) ? 'block' : 'none';
     if (lockedBanner) lockedBanner.style.display = locked ? 'block' : 'none';
 
-    // Botón agregar: solo admin + lista abierta
-    if (addRow)  addRow.style.display  = (isAdmin && !locked) ? 'flex'  : 'none';
+    // Botón agregar: admin siempre (abierta O cerrada — puede sumar reemplazos)
+    if (addRow)  addRow.style.display  = isAdmin ? 'flex'  : 'none';
     // Botón cerrar LBF: solo admin + lista abierta + hay jugadores
     if (lockRow) lockRow.style.display = (isAdmin && !locked && ST.lbf.length > 0) ? 'block' : 'none';
     // Botón desbloquear emergencia: solo bootstrap admin
@@ -1565,6 +1570,8 @@
       return;
     }
 
+    renderLBFCombos();
+    if (isAdmin) loadRegisteredPlayersDatalist();
     if (isAdmin && !locked) {
       // Admin con lista abierta: editable (drag & drop + eliminar)
       wrap.innerHTML = ST.lbf.map((p,i) => `
@@ -1583,7 +1590,7 @@
             onmouseover="this.style.color='var(--grape)'" onmouseout="this.style.color='var(--muted)'">×</button>
         </div>`).join('');
     } else if (isAdmin && locked) {
-      // Admin con lista cerrada: solo activo/inactivo
+      // Admin con lista cerrada: activo/inactivo + puede agregar/quitar (no reordenar)
       wrap.innerHTML = ST.lbf.map((p,i) => `
         <div class="lbf-item">
           <div class="pnum">${i+1}</div>
@@ -1592,6 +1599,10 @@
             <input type="checkbox" ${p.active?'checked':''} onchange="toggleLBF(${i})" style="cursor:pointer;">
             ${p.active?'Activo':'Inactivo'}
           </label>
+          <button onclick="removeLBF(${i})"
+            style="border:none;background:none;color:var(--muted);cursor:pointer;font-size:1.1rem;padding:0 4px;line-height:1;transition:color .2s;"
+            onmouseover="this.style.color='var(--grape)'" onmouseout="this.style.color='var(--muted)'"
+            title="Quitar del equipo">×</button>
         </div>`).join('');
     } else {
       // No-admin: solo lectura
@@ -1645,24 +1656,83 @@
     if(!ST.isAdmin){toast('Solo el admin puede modificar');return;}
     ST.lbf[i].active=!ST.lbf[i].active;
     saveLBF();
-    // No re-renderizar todo (el checkbox ya cambió visualmente)
+    renderLBFCombos(); // actualizar combinaciones al cambiar activos
   }
   function removeLBF(i){
     if(!ST.isAdmin){toast('Solo el admin puede eliminar jugadores');return;}
-    if(ST.lbfLocked){toast('🔒 La LBF está cerrada — no se puede eliminar');return;}
-    if(!confirm(`Eliminar a ${ST.lbf[i].name} de la LBF?`)) return;
+    const msg = ST.lbfLocked
+      ? `¿Quitar a ${ST.lbf[i].name} del equipo?\n(LBF cerrada — el resto del orden no cambia)`
+      : `¿Eliminar a ${ST.lbf[i].name} de la LBF?`;
+    if(!confirm(msg)) return;
     ST.lbf.splice(i,1); ST.lbf.forEach((p,x)=>p.lbfPosition=x+1);
     saveLBF(); renderLBF();
   }
-  function addLBFPlayer(){
+  async function addLBFPlayer(){
     if(!ST.isAdmin){toast('Solo el admin puede agregar jugadores');return;}
-    if(ST.lbfLocked){toast('🔒 La LBF está cerrada — no se puede agregar');return;}
     const inp=document.getElementById('lbf-new-inp'), name=inp.value.trim().toUpperCase();
     if(!name){return;}
     if(ST.lbf.find(p=>p.name.toUpperCase()===name)){toast('⚠️ Ya está en la lista');return;}
-    ST.lbf.push({name,active:true,lbfPosition:ST.lbf.length+1});
+    // Validar que esté registrado en la app
+    if(ST.fbDb){
+      const allSnap = await ST.fbDb.ref('players').once('value');
+      const allPlayers = Object.values(allSnap.val()||{});
+      const registered = allPlayers.find(p => normalizeName(p.name)===normalizeName(name));
+      if(!registered){
+        toast(`⚠️ "${name}" no está registrado en la app. Primero debe registrarse.`);
+        return;
+      }
+    }
+    const pos = ST.lbf.length+1;
+    ST.lbf.push({name,active:true,lbfPosition:pos});
+    if(ST.lbfLocked) toast(`✅ ${name} agregado al final de la LBF (posición ${pos})`);
     inp.value=''; saveLBF(); renderLBF(); updateLBFDatalist();
   }
+  async function loadRegisteredPlayersDatalist(){
+    if(!ST.fbDb) return;
+    const snap = await ST.fbDb.ref('players').once('value');
+    const players = Object.values(snap.val()||{});
+    const dl = document.getElementById('registered-players-list');
+    if(dl) dl.innerHTML = players.map(p=>`<option value="${esc(p.name)}">`).join('');
+  }
+  function renderLBFCombos() {
+    const wrap = document.getElementById('lbf-combos-wrap');
+    if (!wrap) return;
+    const active = ST.lbf.filter(p=>p.active).map((p,i)=>({name:p.name,mn:i+1}));
+    if (active.length < 6) {
+      wrap.innerHTML = active.length > 0
+        ? `<div class="card"><div class="card-title">🎾 Combinaciones de canchas</div><div class="empty" style="padding:16px 0;"><p>Se necesitan 6 jugadores activos.<br><strong class="tgreen">${active.length}/6</strong> activos ahora.</p></div></div>`
+        : '';
+      return;
+    }
+    const combos = getAllPairings(active).map(pairing => {
+      const courts = assignCourts(pairing);
+      const perf = ['d1','d2','d3'].reduce((acc,c)=>{
+        const p=courts[c]; return acc+pairPerf(p[0].name,p[1].name)+(playerPct(p[0].name)+playerPct(p[1].name))/200;
+      },0);
+      return {...courts,perf};
+    }).sort((a,b)=>b.perf-a.perf);
+    const total = combos.length;
+    const shown = combos.slice(0,5);
+    wrap.innerHTML = `
+      <div class="slabel">CANCHAS POSIBLES · ${active.length} ACTIVOS · ${total} COMBINACIONES</div>
+      ${shown.map((f,idx)=>`
+        <div class="fcard ${idx===0?'best':''}">
+          <div class="${idx===0?'txs tgreen fbold':'txs tmuted'}" style="margin-bottom:8px;">${idx===0?'⭐ MEJOR SEGÚN HISTORIAL':`Opción ${idx+1}`}</div>
+          ${['d1','d2','d3'].map(c=>{
+            const pair=f[c],sum=f[c+'s'],h=getPairHist(pair[0].name,pair[1].name);
+            return `<div class="crow">
+              <div class="clabel ${c}">${c.toUpperCase()}</div>
+              <div class="cplayers flex1">
+                <strong>${pair[0].name}</strong> · <strong>${pair[1].name}</strong>
+                <small>Σ${sum}${h&&h.tot>0?` · ${h.W}/${h.tot} juntos`:''}</small>
+              </div>
+            </div>`;
+          }).join('')}
+        </div>`).join('')}
+      <div class="txs tmuted tcenter" style="padding:4px 0 8px;">Art. 19: numerados 1–${active.length} por orden LBF · Art. 13: D1 = Σ menor, D3 = Σ mayor</div>
+    `;
+  }
+
   function saveLBF(){localStorage.setItem('lbf',JSON.stringify(ST.lbf));if(ST.fbDb)ST.fbDb.ref('lbf').set(ST.lbf);}
 
   function updateLBFDatalist(){
