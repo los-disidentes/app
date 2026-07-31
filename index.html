@@ -314,6 +314,25 @@
     .ios-step .step-txt { flex: 1; font-size: 0.84rem; color: var(--ink); line-height: 1.5; }
     .ios-step .step-txt strong { color: var(--green-dk); display: block; margin-bottom: 2px; }
 
+    /* ── HISTORIAL ───────────────────────────────── */
+    .hist-table { width:100%; border-collapse:collapse; font-size:0.72rem; }
+    .hist-table th { background:var(--green-dk); color:#fff; padding:5px 7px; text-align:center; font-weight:600; white-space:nowrap; }
+    .hist-table th.pname-col { text-align:left; min-width:90px; }
+    .hist-table td { padding:5px 7px; border-bottom:1px solid var(--line); text-align:center; }
+    .hist-table td.pname-col { text-align:left; font-weight:600; font-size:0.75rem; }
+    .hist-table tr:last-child td { border-bottom:none; }
+    .hist-table tr:hover td { background:rgba(28,91,58,0.04); }
+    .hcell-played  { color:var(--green); font-size:1rem; }
+    .hcell-conf    { color:#6b7a0a; }
+    .hcell-dec     { color:var(--muted); }
+    .hcell-none    { color:rgba(0,0,0,0.15); }
+    .hist-legend   { display:flex; gap:14px; flex-wrap:wrap; font-size:0.68rem; color:var(--muted); padding:8px 0 4px; }
+    .hist-scroll   { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+    .hist-summary  { display:flex; gap:16px; margin-bottom:10px; flex-wrap:wrap; }
+    .hist-stat     { background:var(--paper); border:1px solid var(--line); border-radius:8px; padding:8px 14px; text-align:center; flex:1; min-width:70px; }
+    .hist-stat .hn { font-size:1.2rem; font-weight:700; color:var(--green-dk); font-family:var(--serif); }
+    .hist-stat .hl { font-size:0.65rem; color:var(--muted); margin-top:2px; }
+
     /* ── TOAST ───────────────────────────────────── */
     .toast { position: fixed; bottom: 72px; left: 50%; transform: translateX(-50%); background: var(--green-deep); color: #fff; border-radius: 8px; padding: 9px 18px; font-size: 0.84rem; z-index: 200; animation: su .3s ease; max-width: 300px; text-align: center; pointer-events: none; box-shadow: 0 4px 16px rgba(0,0,0,0.25); }
     @keyframes su { from { opacity:0; transform:translateX(-50%) translateY(10px); } to { opacity:1; transform:translateX(-50%) translateY(0); } }
@@ -517,6 +536,15 @@
 
     <!-- Combinaciones de canchas basadas en activos de la LBF -->
     <div id="lbf-combos-wrap"></div>
+
+    <!-- Historial de asistencia y partidos jugados -->
+    <div class="card" id="history-card">
+      <div class="card-title" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;" onclick="toggleHistory()">
+        <span>📊 Historial de Asistencia</span>
+        <span id="history-toggle-icon" style="font-size:0.8rem;color:var(--muted);">▼ Ver</span>
+      </div>
+      <div id="history-wrap" style="display:none;"></div>
+    </div>
 
     <!-- Panel Admin — solo visible para admin -->
     <div class="card" id="admin-card" style="display:none;">
@@ -1697,29 +1725,45 @@
   function renderLBFCombos() {
     const wrap = document.getElementById('lbf-combos-wrap');
     if (!wrap) return;
-    const active = ST.lbf.filter(p=>p.active).map((p,i)=>({name:p.name,mn:i+1}));
-    if (active.length < 6) {
-      wrap.innerHTML = active.length > 0
-        ? `<div class="card"><div class="card-title">🎾 Combinaciones de canchas</div><div class="empty" style="padding:16px 0;"><p>Se necesitan 6 jugadores activos.<br><strong class="tgreen">${active.length}/6</strong> activos ahora.</p></div></div>`
-        : '';
+    const nm = nextMatch();
+    if (!nm) { wrap.innerHTML = ''; return; }
+
+    // Solo jugadores activos EN LBF que además confirmaron asistencia para esta fecha
+    const confNames = Object.values(ST.attendance)
+      .filter(v => v.status === 'confirmed')
+      .map(v => normalizeName(v.player || ''));
+    const confirmed = ST.lbf
+      .filter(p => p.active && confNames.includes(normalizeName(p.name)))
+      .map((p,i) => ({name:p.name, mn:i+1}));
+
+    if (confirmed.length < 6) {
+      wrap.innerHTML = `
+        <div class="slabel">COMBINACIONES POSIBLES · F${nm.rueda}</div>
+        <div class="card"><div class="empty" style="padding:16px 0;">
+          <div class="ei">⏳</div>
+          <p>Esperando confirmaciones de asistencia.<br>
+          <strong class="tgreen">${confirmed.length}/6</strong> confirmados hasta ahora.</p>
+          <div class="txs tmuted">Las combinaciones aparecen cuando haya 6 jugadores confirmados.</div>
+        </div></div>`;
       return;
     }
-    const combos = getAllPairings(active).map(pairing => {
+
+    const combos = getAllPairings(confirmed).map(pairing => {
       const courts = assignCourts(pairing);
-      const perf = ['d1','d2','d3'].reduce((acc,c)=>{
-        const p=courts[c]; return acc+pairPerf(p[0].name,p[1].name)+(playerPct(p[0].name)+playerPct(p[1].name))/200;
-      },0);
-      return {...courts,perf};
-    }).sort((a,b)=>b.perf-a.perf);
-    const total = combos.length;
-    const shown = combos.slice(0,5);
+      const perf = ['d1','d2','d3'].reduce((acc,c) => {
+        const p = courts[c];
+        return acc + pairPerf(p[0].name,p[1].name) + (playerPct(p[0].name)+playerPct(p[1].name))/200;
+      }, 0);
+      return {...courts, perf};
+    }).sort((a,b) => b.perf - a.perf);
+
     wrap.innerHTML = `
-      <div class="slabel">CANCHAS POSIBLES · ${active.length} ACTIVOS · ${total} COMBINACIONES</div>
-      ${shown.map((f,idx)=>`
+      <div class="slabel">COMBINACIONES · F${nm.rueda} vs ${rival(nm)} · ${confirmed.length} CONFIRMADOS · ${combos.length} OPCIONES</div>
+      ${combos.slice(0,5).map((f,idx) => `
         <div class="fcard ${idx===0?'best':''}">
           <div class="${idx===0?'txs tgreen fbold':'txs tmuted'}" style="margin-bottom:8px;">${idx===0?'⭐ MEJOR SEGÚN HISTORIAL':`Opción ${idx+1}`}</div>
-          ${['d1','d2','d3'].map(c=>{
-            const pair=f[c],sum=f[c+'s'],h=getPairHist(pair[0].name,pair[1].name);
+          ${['d1','d2','d3'].map(c => {
+            const pair=f[c], sum=f[c+'s'], h=getPairHist(pair[0].name,pair[1].name);
             return `<div class="crow">
               <div class="clabel ${c}">${c.toUpperCase()}</div>
               <div class="cplayers flex1">
@@ -1729,8 +1773,134 @@
             </div>`;
           }).join('')}
         </div>`).join('')}
-      <div class="txs tmuted tcenter" style="padding:4px 0 8px;">Art. 19: numerados 1–${active.length} por orden LBF · Art. 13: D1 = Σ menor, D3 = Σ mayor</div>
+      <div class="txs tmuted tcenter" style="padding:4px 0 8px;">Art. 19: numerados 1–${confirmed.length} por orden LBF · Art. 13: D1 = Σ menor, D3 = Σ mayor</div>
     `;
+  }
+
+  // ═══════════════════════════════════════════
+  // HISTORIAL DE ASISTENCIA + PARTIDOS
+  // ═══════════════════════════════════════════
+  let _historyLoaded = false;
+
+  function toggleHistory() {
+    const wrap = document.getElementById('history-wrap');
+    const icon = document.getElementById('history-toggle-icon');
+    const open = wrap.style.display !== 'none';
+    wrap.style.display = open ? 'none' : 'block';
+    icon.textContent = open ? '▼ Ver' : '▲ Ocultar';
+    if (!open && !_historyLoaded) loadPlayerHistory();
+  }
+
+  async function loadPlayerHistory() {
+    const wrap = document.getElementById('history-wrap');
+    if (!ST.fbDb) { wrap.innerHTML = '<div class="txs tmuted">Requiere conexión a Firebase.</div>'; return; }
+    wrap.innerHTML = '<div class="tcenter" style="padding:14px;"><span class="spin"></span><div class="txs tmuted mt8">Cargando historial…</div></div>';
+
+    // Fechas pasadas o con asistencia cerrada
+    const past = ST.fixture.filter(m => m.played || isLocked(m));
+    if (!past.length) {
+      wrap.innerHTML = '<div class="txs tmuted tcenter" style="padding:10px;">Aún no hay fechas con historial disponible.</div>';
+      return;
+    }
+
+    // Cargar attendance y formation de todas las fechas en paralelo
+    const [attSnap, formSnap] = await Promise.all([
+      ST.fbDb.ref('attendance').once('value'),
+      ST.fbDb.ref('formation').once('value'),
+    ]);
+    const allAtt  = attSnap.val()  || {};
+    const allForm = formSnap.val() || {};
+
+    // Jugadores: todos los que están en la LBF o aparecieron alguna vez en attendance
+    const playerSet = new Set(ST.lbf.map(p => p.name));
+    Object.values(allAtt).forEach(matchAtt => {
+      Object.values(matchAtt).forEach(e => { if(e.player) playerSet.add(e.player); });
+    });
+    const players = [...playerSet].sort((a,b) => {
+      const ia = ST.lbf.findIndex(p=>p.name===a);
+      const ib = ST.lbf.findIndex(p=>p.name===b);
+      if (ia>=0 && ib>=0) return ia-ib;
+      if (ia>=0) return -1;
+      if (ib>=0) return 1;
+      return a.localeCompare(b);
+    });
+
+    // Helper: estado de asistencia de un jugador en una fecha
+    function getAttStatus(playerName, matchId) {
+      const matchAtt = allAtt[matchId] || {};
+      // Buscar por fbKey directo
+      const byKey = matchAtt[fbKey(playerName)];
+      if (byKey) return byKey.status;
+      // Buscar por nombre normalizado
+      const entry = Object.values(matchAtt).find(e => normalizeName(e.player||'') === normalizeName(playerName));
+      return entry ? entry.status : null;
+    }
+
+    // Helper: si un jugador jugó en esa fecha (está en la formación confirmada)
+    function didPlay(playerName, matchId) {
+      const f = allForm[matchId];
+      if (!f || !f.locked) return false;
+      return ['d1','d2','d3'].some(c => Array.isArray(f[c]) && f[c].some(p => normalizeName(p.name) === normalizeName(playerName)));
+    }
+
+    // Totales por jugador
+    const totals = {};
+    players.forEach(name => {
+      totals[name] = { conf: 0, dec: 0, played: 0 };
+      past.forEach(m => {
+        const s = getAttStatus(name, m.id);
+        if (s === 'confirmed') totals[name].conf++;
+        else if (s === 'declined') totals[name].dec++;
+        if (didPlay(name, m.id)) totals[name].played++;
+      });
+    });
+
+    // Columnas = past matches
+    const cols = past.map(m => `<th title="${fmtDate(m.fecha)} vs ${rival(m)}">F${m.rueda}</th>`).join('');
+
+    // Filas por jugador
+    const rows = players.map(name => {
+      const cells = past.map(m => {
+        const played = didPlay(name, m.id);
+        const att    = getAttStatus(name, m.id);
+        if (played)            return `<td class="hcell-played" title="Jugó">🎾</td>`;
+        if (att==='confirmed') return `<td class="hcell-conf"   title="Confirmó">✓</td>`;
+        if (att==='declined')  return `<td class="hcell-dec"    title="Declinó">✗</td>`;
+        return `<td class="hcell-none" title="Sin respuesta">·</td>`;
+      }).join('');
+      const t = totals[name];
+      return `<tr>
+        <td class="pname-col">${esc(name.split(' ')[0])}</td>
+        ${cells}
+        <td class="hcell-played fbold">${t.played}</td>
+        <td class="hcell-conf fbold">${t.conf}</td>
+        <td class="hcell-dec fbold">${t.dec}</td>
+      </tr>`;
+    }).join('');
+
+    wrap.innerHTML = `
+      <div class="hist-scroll">
+        <table class="hist-table">
+          <thead>
+            <tr>
+              <th class="pname-col">Jugador</th>
+              ${cols}
+              <th title="Partidos jugados">🎾</th>
+              <th title="Veces que confirmó">✓</th>
+              <th title="Veces que declinó">✗</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+      <div class="hist-legend">
+        <span>🎾 Jugó</span>
+        <span style="color:#6b7a0a;">✓ Confirmó asistencia</span>
+        <span>✗ Declinó</span>
+        <span>· Sin respuesta</span>
+      </div>
+    `;
+    _historyLoaded = true;
   }
 
   function saveLBF(){localStorage.setItem('lbf',JSON.stringify(ST.lbf));if(ST.fbDb)ST.fbDb.ref('lbf').set(ST.lbf);}
@@ -1753,7 +1923,7 @@
     if (tab==='asistencia')                            renderAtt();
     if (tab==='parejas')                               renderParejas();
     if (tab==='rendimientos' && !ST.perfLoaded)        renderRend();
-    if (tab==='lbf') { renderLBF(); if(ST.isAdmin && ST.fbDb) renderAdmin(); }
+    if (tab==='lbf') { _historyLoaded = false; renderLBF(); if(ST.isAdmin && ST.fbDb) renderAdmin(); }
     if (tab==='chat') {
       renderChat();
       document.getElementById('badge-chat').classList.add('hidden');
