@@ -1237,14 +1237,16 @@
           </div>
           <div class="padmin-actions">
             <button class="padmin-btn" data-pname="${esc(p.name)}" data-action="resetpin" title="Resetear PIN">🔑 PIN</button>
-            ${!isAdm
-              ? `<button class="padmin-btn" data-pname="${esc(p.name)}" data-pkey="${key}" data-action="makeadmin" title="Hacer admin">👑</button>`
-              : `<button class="padmin-btn" data-pname="${esc(p.name)}" data-pkey="${key}" data-action="removeadmin" title="Quitar admin">−👑</button>`}
             <button class="padmin-btn del" data-pname="${esc(p.name)}" data-pkey="${key}" data-action="removeplayer" title="Eliminar registro">🗑</button>
           </div>
         </div>`;
       }).join('')}
       <div class="separator"></div>
+      <div class="txs tmuted" style="padding:8px 4px;line-height:1.5;">
+        👑 Para dar o quitar permisos de admin, hacelo desde
+        <a href="https://console.firebase.google.com/project/los-disidentes-app/database" target="_blank" rel="noopener" style="color:var(--green);">Firebase Console</a>
+        → Realtime Database → <code>config/admins</code>.
+      </div>
       <button class="btn btn-o btn-full btn-sm" onclick="renderAdmin()">🔄 Actualizar lista</button>
     `;
 
@@ -1255,9 +1257,7 @@
       const action = btn.dataset.action;
       const pname  = btn.dataset.pname || '';
       const pkey   = btn.dataset.pkey  || '';
-      if (action === 'resetpin')    adminResetPin(pname);
-      if (action === 'makeadmin')   adminToggleAdmin(pname, pkey, true);
-      if (action === 'removeadmin') adminToggleAdmin(pname, pkey, false);
+      if (action === 'resetpin')     adminResetPin(pname);
       if (action === 'removeplayer') adminRemovePlayer(pname, pkey);
     }, { once: true });
   }
@@ -1280,18 +1280,6 @@
     renderAdmin();
   }
 
-  async function adminToggleAdmin(name, key, makeAdmin) {
-    if (makeAdmin) {
-      await ST.fbDb.ref(`config/admins/${key}`).set(true);
-      toast(`👑 ${name} es ahora administrador`);
-    } else {
-      const nameFirst = normalizeName(name).split(' ')[0];
-      if (name === CFG.bootstrapAdmin || nameFirst === CFG.bootstrapAdmin) { toast('⚠️ No podés quitar los permisos del admin principal'); return; }
-      await ST.fbDb.ref(`config/admins/${key}`).remove();
-      toast(`✅ ${name} ya no es administrador`);
-    }
-    renderAdmin();
-  }
 
   async function deleteMessage(msgId) {
     if (!ST.isAdmin || !ST.fbDb) return;
