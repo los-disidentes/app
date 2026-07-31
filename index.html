@@ -130,7 +130,9 @@
     }
 
     /* ── CONTENT ─────────────────────────────────── */
-    .tab { flex: 1; overflow-y: auto; padding: 16px; display: none; background: var(--cream); }
+    /* <main> es el flex child que ocupa el espacio restante del body */
+    main#tab-content { flex: 1; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+    .tab { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 16px; display: none; background: var(--cream); min-height: 0; }
     .tab.active { display: block; }
     #tab-chat.active { display: flex; flex-direction: column; padding: 0; }
     ::-webkit-scrollbar { width: 5px; }
