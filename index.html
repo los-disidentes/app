@@ -691,10 +691,10 @@
       <div id="admin-panel"><div class="tcenter tmuted tsm">Cargando…</div></div>
     </div>
 
-    <div class="card">
+    <div class="card" id="firebase-card" style="display:none;">
       <div class="card-title">🔥 Firebase</div>
       <p class="tsm tmuted" style="margin-bottom:10px; line-height:1.5;">
-        Pegá el URL de tu Realtime Database para sincronizar en tiempo real.
+        URL de la Realtime Database (solo admin).
       </p>
       <input class="inp" id="fb-url-inp" placeholder="https://tu-proyecto-default-rtdb.firebaseio.com">
       <button class="btn btn-p w100" onclick="saveFirebaseConfig()">Guardar y conectar</button>
@@ -993,12 +993,14 @@
   }
 
   function applyAdminUI() {
-    const crown    = document.getElementById('admin-crown');
-    const addRow   = document.getElementById('lbf-add-row');
-    const adminCard= document.getElementById('admin-card');
+    const crown       = document.getElementById('admin-crown');
+    const addRow      = document.getElementById('lbf-add-row');
+    const adminCard   = document.getElementById('admin-card');
+    const fbCard      = document.getElementById('firebase-card');
     if (crown)     crown.style.display     = ST.isAdmin ? 'inline' : 'none';
     if (addRow)    addRow.style.display    = ST.isAdmin ? 'flex'   : 'none';
     if (adminCard) adminCard.style.display = ST.isAdmin ? 'block'  : 'none';
+    if (fbCard)    fbCard.style.display    = ST.isAdmin ? 'block'  : 'none';
     if (ST.activeTab === 'lbf')  { renderLBF(); if(ST.isAdmin) renderAdmin(); }
     if (ST.activeTab === 'chat') renderChat();
   }
