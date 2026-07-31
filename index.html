@@ -494,6 +494,51 @@
     </div>
   </div>
 
+  <!-- MODAL MENÚ DEL JUGADOR -->
+  <div id="modal-player-menu" class="modal-ov hidden" onclick="if(event.target===this)closePlayerMenu()">
+    <div class="modal-box" style="max-width:320px; padding:20px;">
+      <div style="text-align:center; margin-bottom:16px;">
+        <div style="width:54px;height:54px;border-radius:50%;background:var(--green);color:#fff;font-family:var(--serif);font-size:1.5rem;font-weight:700;display:flex;align-items:center;justify-content:center;margin:0 auto 10px;">
+          <span id="pmenu-avatar">?</span>
+        </div>
+        <div id="pmenu-name" style="font-family:var(--serif);font-size:1rem;font-weight:700;color:var(--ink);"></div>
+        <div style="font-size:0.7rem;color:var(--muted);font-family:var(--sans);margin-top:2px;">Jugador activo</div>
+      </div>
+      <div class="separator"></div>
+      <button class="btn btn-o btn-full" style="margin-bottom:8px;text-align:left;display:flex;align-items:center;gap:10px;" onclick="showEditNameModal()">
+        <span>✏️</span> <span>Cambiar nombre</span>
+      </button>
+      <button class="btn btn-d btn-full" style="text-align:left;display:flex;align-items:center;gap:10px;" onclick="closePlayerMenu();logout()">
+        <span>🚪</span> <span>Cerrar sesión</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- MODAL EDITAR NOMBRE -->
+  <div id="modal-edit-name" class="modal-ov hidden" onclick="if(event.target===this)this.classList.add('hidden')">
+    <div class="modal-box" style="max-width:360px;">
+      <div class="modal-hdr">
+        <span style="font-family:var(--serif);font-size:1.1rem;font-weight:700;color:var(--green-dk);">✏️ Cambiar nombre</span>
+        <button class="modal-x" onclick="document.getElementById('modal-edit-name').classList.add('hidden')">✕</button>
+      </div>
+      <p style="font-size:0.8rem;color:var(--muted);margin-bottom:14px;font-family:var(--sans);line-height:1.5;">
+        Actualizá tu nombre y apellido. Tu PIN no cambia.
+      </p>
+      <div style="display:flex;gap:8px;">
+        <input class="inp" id="edit-first" placeholder="Nombre" maxlength="20"
+               style="text-transform:uppercase;margin-bottom:0;flex:1;"
+               oninput="this.value=this.value.toUpperCase().replace(/[^A-ZÁÉÍÓÚÜÑ ]/gi,'')"
+               onkeypress="if(event.key==='Enter')document.getElementById('edit-last').focus()">
+        <input class="inp" id="edit-last" placeholder="Apellido" maxlength="30"
+               style="text-transform:uppercase;margin-bottom:0;flex:1;"
+               oninput="this.value=this.value.toUpperCase().replace(/[^A-ZÁÉÍÓÚÜÑ ]/gi,'')"
+               onkeypress="if(event.key==='Enter')saveNewName()">
+      </div>
+      <div class="auth-error" id="edit-name-error" style="margin-top:8px;"></div>
+      <button class="btn btn-p btn-full" id="edit-name-btn" onclick="saveNewName()" style="margin-top:10px;">Guardar</button>
+    </div>
+  </div>
+
   <!-- HEADER -->
   <header class="header">
     <img class="header-logo" src="https://los-disidentes.github.io/logo.png" alt="Los Disidentes"
@@ -1044,9 +1089,94 @@
   // PLAYER MENU (badge)
   // ═══════════════════════════════════════════
   function showPlayerMenu() {
-    const opts = ['Cambiar sesión (cerrar sesión)'];
-    const sel = window.confirm(`👤 ${ST.player}${ST.isAdmin?' 👑':''}\n\n¿Cerrar sesión?`);
-    if (sel) logout();
+    document.getElementById('modal-player-menu').classList.remove('hidden');
+    document.getElementById('pmenu-name').textContent = ST.player + (ST.isAdmin ? ' 👑' : '');
+    document.getElementById('pmenu-avatar').textContent = (ST.player || '?').charAt(0);
+  }
+  function closePlayerMenu() {
+    document.getElementById('modal-player-menu').classList.add('hidden');
+  }
+  function showEditNameModal() {
+    closePlayerMenu();
+    // Pre-rellenar con nombre actual
+    const parts = (ST.player || '').split(' ');
+    document.getElementById('edit-first').value = parts[0] || '';
+    document.getElementById('edit-last').value  = parts.slice(1).join(' ') || '';
+    document.getElementById('edit-name-error').textContent = '';
+    document.getElementById('modal-edit-name').classList.remove('hidden');
+    document.getElementById('edit-first').focus();
+  }
+  async function saveNewName() {
+    const firstName = normalizeName(document.getElementById('edit-first').value);
+    const lastName  = normalizeName(document.getElementById('edit-last').value);
+    const errEl     = document.getElementById('edit-name-error');
+    const btn       = document.getElementById('edit-name-btn');
+
+    if (!firstName || firstName.length < 2) { errEl.textContent = '⚠️ Ingresá tu nombre'; return; }
+    if (!lastName  || lastName.length  < 2) { errEl.textContent = '⚠️ Ingresá tu apellido'; return; }
+
+    const newName = `${firstName} ${lastName}`;
+    if (newName === ST.player) { document.getElementById('modal-edit-name').classList.add('hidden'); return; }
+
+    btn.textContent = 'Guardando…'; btn.disabled = true;
+
+    if (ST.fbDb) {
+      try {
+        // Verificar que el nuevo nombre no esté tomado por otro jugador
+        const allSnap = await ST.fbDb.ref('players').once('value');
+        const allPlayers = allSnap.val() || {};
+        const conflict = Object.values(allPlayers).find(p =>
+          p.name !== ST.player &&
+          normalizeName(p.name).replace(/\s+/g,'') === newName.replace(/\s+/g,'')
+        );
+        if (conflict) {
+          errEl.textContent = `⚠️ "${conflict.name}" ya está registrado.`;
+          btn.textContent = 'Guardar'; btn.disabled = false;
+          return;
+        }
+
+        const oldKey = fbKey(ST.player);
+        const newKey = fbKey(newName);
+        const currentSnap = await ST.fbDb.ref(`players/${oldKey}`).once('value');
+        const currentData = currentSnap.val() || {};
+
+        // Crear entrada con nuevo nombre, borrar la vieja
+        await ST.fbDb.ref(`players/${newKey}`).set({ ...currentData, name: newName, lastLogin: Date.now() });
+        await ST.fbDb.ref(`players/${oldKey}`).remove();
+
+        // Actualizar admin si era admin por Firebase
+        const wasAdmin = await ST.fbDb.ref(`config/admins/${oldKey}`).once('value');
+        if (wasAdmin.val()) {
+          await ST.fbDb.ref(`config/admins/${newKey}`).set(true);
+          await ST.fbDb.ref(`config/admins/${oldKey}`).remove();
+        }
+
+        // Actualizar presencia
+        ST.fbDb.ref(`presence/${oldKey}`).remove();
+      } catch(e) {
+        errEl.textContent = '⚠️ Error al guardar. Intentá de nuevo.';
+        btn.textContent = 'Guardar'; btn.disabled = false;
+        return;
+      }
+    }
+
+    // Actualizar estado local
+    const oldPlayer = ST.player;
+    ST.player = newName;
+    localStorage.setItem('playerName', newName);
+
+    // Actualizar badge
+    const parts = newName.split(' ');
+    const badge = parts.length >= 2 && newName.length > 16
+      ? parts[0] + ' ' + parts[parts.length-1].charAt(0) + '.'
+      : newName;
+    document.getElementById('player-badge-txt').textContent = badge;
+
+    document.getElementById('modal-edit-name').classList.add('hidden');
+    btn.textContent = 'Guardar'; btn.disabled = false;
+
+    checkAdmin();
+    toast(`✅ Nombre actualizado a ${newName}`);
   }
   function logout() {
     localStorage.removeItem('playerName');
