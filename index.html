@@ -1720,8 +1720,8 @@
   }
   function rival(m) { return m?(m.home?m.visitor:m.local):''; }
   function fbKey(n)  {
-    // Espacio → '--' (distinto de guion bajo, evita colisiones entre "ANA GARCIA" y "ANA_GARCIA")
-    return (n||'').trim().replace(/ /g,'--').replace(/[.#$\[\]\/]/g,'_');
+    // Espacio → '_'; los nombres solo contienen letras (NAME_RE), no hay colisión posible
+    return (n||'').trim().replace(/ /g,'_').replace(/[.#$\[\]\/]/g,'_');
   }
   function esc(s)    { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
