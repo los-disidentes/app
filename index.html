@@ -546,22 +546,41 @@
   <div id="modal-fee-payment" class="modal-ov hidden" onclick="if(event.target===this)this.classList.add('hidden')">
     <div class="modal-box" style="max-width:340px;">
       <div class="modal-hdr">
-        <span style="font-family:var(--serif);font-size:1.1rem;font-weight:700;color:var(--bordo);">💳 Fee de Capitanía</span>
+        <span style="font-family:var(--serif);font-size:1.1rem;font-weight:700;color:var(--bordo);">💰 Fee de Capitanía</span>
         <button class="modal-x" onclick="document.getElementById('modal-fee-payment').classList.add('hidden')">✕</button>
       </div>
-      <p style="font-size:0.82rem;color:var(--ink);margin-bottom:14px;font-family:var(--sans);line-height:1.6;">
-        Transferí <strong>$25.000</strong> a <strong>Alfonso Chala</strong> (Capitán) por el fee de capitanía del mes.
-      </p>
-      <div style="background:var(--mint);border-radius:12px;padding:16px;text-align:center;margin-bottom:12px;border:1px solid var(--line);">
-        <div style="font-size:0.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-family:var(--sans);font-weight:700;margin-bottom:4px;">CVU · Alfonso Chala</div>
-        <div id="fee-cvu-display" style="font-family:monospace;font-size:0.92rem;font-weight:700;color:var(--green-dk);letter-spacing:1.5px;word-break:break-all;">0000003100071780662081</div>
-        <button onclick="copyCVU()" style="margin-top:10px;background:var(--green);color:#fff;border:none;border-radius:8px;padding:8px 18px;font-size:0.8rem;font-weight:700;cursor:pointer;font-family:var(--sans);">📋 Copiar CVU</button>
+
+      <!-- Monto destacado -->
+      <div style="text-align:center;margin-bottom:16px;">
+        <div style="font-family:var(--serif);font-size:2.2rem;font-weight:700;color:var(--green-dk);line-height:1;">$25.000</div>
+        <div style="font-size:0.78rem;color:var(--muted);font-family:var(--sans);margin-top:2px;">para <strong>Alfonso Chala</strong> · fee mensual de capitanía</div>
       </div>
-      <p style="font-size:0.75rem;color:var(--muted);text-align:center;font-family:var(--sans);line-height:1.6;margin-bottom:14px;">
-        Podés transferir desde Mercado Pago, Ualá,<br>Naranja X o tu banco. Monto: <strong>$25.000</strong>
-      </p>
+
+      <!-- CVU -->
+      <div style="background:var(--mint);border-radius:12px;padding:14px 16px;margin-bottom:14px;border:1px solid var(--line);">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+          <div>
+            <div style="font-size:0.62rem;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-family:var(--sans);font-weight:700;">CVU</div>
+            <div id="fee-cvu-display" style="font-family:monospace;font-size:0.9rem;font-weight:700;color:var(--green-dk);letter-spacing:1px;">0000003100071780662081</div>
+          </div>
+          <button onclick="copyCVU()" style="flex-shrink:0;background:var(--green);color:#fff;border:none;border-radius:8px;padding:8px 12px;font-size:0.78rem;font-weight:700;cursor:pointer;font-family:var(--sans);">📋 Copiar</button>
+        </div>
+      </div>
+
+      <!-- Instrucciones -->
+      <div style="background:#fff;border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:14px;">
+        <p style="font-size:0.78rem;font-family:var(--sans);color:var(--ink);margin:0 0 8px;font-weight:700;">Cómo transferir:</p>
+        <ol style="font-size:0.76rem;color:var(--muted);font-family:var(--sans);line-height:1.7;margin:0;padding-left:16px;">
+          <li>Abrí Mercado Pago, Ualá, Naranja X o tu banco</li>
+          <li>Tocá <strong>Transferir</strong> → ingresá el CVU</li>
+          <li>Monto: <strong>$25.000</strong></li>
+          <li>Concepto (opcional): <em>Fee capitanía</em></li>
+        </ol>
+      </div>
+
+      <!-- Sección admin -->
       <div id="fee-admin-confirm-wrap" style="display:none;border-top:1px solid var(--line);padding-top:12px;">
-        <p style="font-size:0.75rem;color:var(--muted);font-family:var(--sans);margin-bottom:8px;">Admin: confirmá el pago una vez que lo veas en la app de Alfonso.</p>
+        <p style="font-size:0.75rem;color:var(--muted);font-family:var(--sans);margin-bottom:8px;line-height:1.5;">Confirmá el pago una vez que lo veas acreditado en la cuenta de Alfonso.</p>
         <button id="fee-confirm-btn" onclick="confirmFeeFromModal()" style="width:100%;background:var(--green);color:#fff;border:none;border-radius:10px;padding:11px;font-size:0.88rem;font-weight:700;cursor:pointer;font-family:var(--sans);">✅ Confirmar pago recibido</button>
       </div>
     </div>
@@ -688,14 +707,15 @@
           🔒 Cerrar LBF del torneo
         </button>
         <p class="txs tmuted tcenter mt8" style="line-height:1.5;">
-          ⚠️ Esta acción es permanente. El orden no se podrá cambiar.
+          Fija el orden para el torneo. Podés reabrirla si necesitás hacer cambios.
         </p>
       </div>
 
-      <!-- Botón desbloquear — solo superadmin, emergencias -->
+      <!-- Botón desbloquear — visible para cualquier admin -->
       <div id="lbf-unlock-row" style="display:none; margin-top:10px;">
-        <button class="btn btn-d btn-sm w100" onclick="unlockLBF()">
-          🔓 Desbloquear LBF (emergencia)
+        <button class="btn btn-sm w100" onclick="unlockLBF()"
+          style="background:none;border:1.5px solid var(--green-dk);color:var(--green-dk);font-size:0.82rem;">
+          🔓 Reabrir LBF para editar
         </button>
       </div>
     </div>
@@ -1895,8 +1915,8 @@
     if (addRow)  addRow.style.display  = isAdmin ? 'flex'  : 'none';
     // Botón cerrar LBF: solo admin + lista abierta + hay jugadores
     if (lockRow) lockRow.style.display = (isAdmin && !locked && ST.lbf.length > 0) ? 'block' : 'none';
-    // Botón desbloquear emergencia: solo bootstrap admin
-    if (unlockRow) unlockRow.style.display = (isBootstrapAdmin() && locked) ? 'block' : 'none';
+    // Botón desbloquear: cualquier admin
+    if (unlockRow) unlockRow.style.display = (isAdmin && locked) ? 'block' : 'none';
 
     if (!ST.lbf.length) {
       wrap.innerHTML = '<div class="tmuted tsm tcenter" style="padding:10px;">Lista vacía — el admin debe agregar jugadores en el orden oficial de la LBF.</div>';
@@ -1951,7 +1971,7 @@
   async function lockLBF() {
     if (!ST.isAdmin) return;
     if (!ST.lbf.length) { toast('⚠️ Primero agregá jugadores a la lista'); return; }
-    if (!confirm(`¿Cerrar la LBF con ${ST.lbf.length} jugadores?\n\nEsta acción fija el orden para todo el torneo (Art. 13/19).\nNo se puede deshacer.`)) return;
+    if (!confirm(`¿Cerrar la LBF con ${ST.lbf.length} jugadores?\n\nEsto fija el orden para el torneo (Art. 13/19).\nPodés reabrirla desde el panel de admin si necesitás hacer cambios.`)) return;
     if (ST.fbDb) {
       await ST.fbDb.ref('config/lbfLocked').set(true);
       await ST.fbDb.ref('config/lbfLockedBy').set(ST.player);
@@ -1964,12 +1984,12 @@
   }
 
   async function unlockLBF() {
-    if (!isBootstrapAdmin()) return;
-    if (!confirm('⚠️ EMERGENCIA: ¿Desbloquear la LBF?\nUsalo solo si hubo un error en la carga inicial.')) return;
+    if (!ST.isAdmin) return;
+    if (!confirm('¿Reabrir la LBF para editar el orden?\nPodés volver a cerrarla cuando termines.')) return;
     if (ST.fbDb) await ST.fbDb.ref('config/lbfLocked').set(false);
     ST.lbfLocked = false;
     localStorage.setItem('lbfLocked', 'false');
-    toast('🔓 LBF desbloqueada — podés corregir el orden');
+    toast('🔓 LBF abierta — podés editar el orden');
     renderLBF();
   }
 
