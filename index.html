@@ -3,6 +3,18 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <!--
+    CSP: 'unsafe-inline' en script-src es necesario por los 45+ inline handlers (onclick, etc.).
+    Mientras existan inline handlers, CSP no puede bloquear XSS inline.
+    Migración pendiente: mover handlers a addEventListener() → eliminar 'unsafe-inline' → CSP estricto.
+    Lo que SÍ protege esta CSP ya:
+      - Bloquea scripts externos de orígenes no autorizados
+      - connect-src limita exfiltración de datos por fetch/XHR
+      - object-src 'none' bloquea plugins (Flash, etc.)
+      - base-uri 'self' bloquea ataques de base-tag
+      - form-action 'self' bloquea envío de formularios a orígenes externos
+  -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline' https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src https://*.firebaseio.com wss://*.firebaseio.com https://*.googleapis.com https://api.allorigins.win https://www.ligacountrysur.com.ar https://api.imgbb.com; img-src 'self' https://los-disidentes.github.io https://*.ibb.co data: blob:; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'self'; form-action 'self';">
   <meta name="theme-color" content="#0F5F38">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
