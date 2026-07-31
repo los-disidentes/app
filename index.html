@@ -383,6 +383,12 @@
     .hist-stat     { background:var(--paper); border:1px solid var(--line); border-radius:10px; padding:9px 14px; text-align:center; flex:1; min-width:70px; box-shadow:var(--shadow); }
     .hist-stat .hn { font-size:1.3rem; font-weight:700; color:var(--green-dk); font-family:var(--serif); }
     .hist-stat .hl { font-size:0.62rem; color:var(--muted); margin-top:2px; font-family:var(--sans); font-weight:700; text-transform:uppercase; letter-spacing:.5px; }
+    .hcell-fee-paid   { color:var(--green); font-size:1rem; cursor:default; }
+    .hcell-fee-paid.admin-ok { cursor:pointer; }
+    .fee-pay-btn  { background:none; border:1.5px solid var(--bordo); color:var(--bordo); border-radius:6px; padding:2px 5px; font-size:0.65rem; font-weight:700; cursor:pointer; font-family:var(--sans); white-space:nowrap; }
+    .fee-pay-btn:active { opacity:0.7; }
+    .hist-table th.fee-col { background:var(--bordo); }
+    .hist-table td.fee-col { background:rgba(110,31,51,0.04); }
 
     /* ── TOAST ───────────────────────────────────── */
     .toast { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); background: var(--ink); color: #fff; border-radius: 10px; padding: 10px 20px; font-size: 0.84rem; z-index: 200; animation: su .3s ease; max-width: 300px; text-align: center; pointer-events: none; box-shadow: 0 6px 20px rgba(0,0,0,0.28); font-family: var(--sans); font-weight: 600; }
@@ -536,6 +542,31 @@
       </div>
       <div class="auth-error" id="edit-name-error" style="margin-top:8px;"></div>
       <button class="btn btn-p btn-full" id="edit-name-btn" onclick="saveNewName()" style="margin-top:10px;">Guardar</button>
+    </div>
+  </div>
+
+  <!-- MODAL FEE CAPITANÍA -->
+  <div id="modal-fee-payment" class="modal-ov hidden" onclick="if(event.target===this)this.classList.add('hidden')">
+    <div class="modal-box" style="max-width:340px;">
+      <div class="modal-hdr">
+        <span style="font-family:var(--serif);font-size:1.1rem;font-weight:700;color:var(--bordo);">💳 Fee de Capitanía</span>
+        <button class="modal-x" onclick="document.getElementById('modal-fee-payment').classList.add('hidden')">✕</button>
+      </div>
+      <p style="font-size:0.82rem;color:var(--ink);margin-bottom:14px;font-family:var(--sans);line-height:1.6;">
+        Transferí <strong>$25.000</strong> a <strong>Alfonso Chala</strong> (Capitán) por el fee de capitanía del mes.
+      </p>
+      <div style="background:var(--mint);border-radius:12px;padding:16px;text-align:center;margin-bottom:12px;border:1px solid var(--line);">
+        <div style="font-size:0.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-family:var(--sans);font-weight:700;margin-bottom:4px;">CVU · Alfonso Chala</div>
+        <div id="fee-cvu-display" style="font-family:monospace;font-size:0.92rem;font-weight:700;color:var(--green-dk);letter-spacing:1.5px;word-break:break-all;">0000003100071780662081</div>
+        <button onclick="copyCVU()" style="margin-top:10px;background:var(--green);color:#fff;border:none;border-radius:8px;padding:8px 18px;font-size:0.8rem;font-weight:700;cursor:pointer;font-family:var(--sans);">📋 Copiar CVU</button>
+      </div>
+      <p style="font-size:0.75rem;color:var(--muted);text-align:center;font-family:var(--sans);line-height:1.6;margin-bottom:14px;">
+        Podés transferir desde Mercado Pago, Ualá,<br>Naranja X o tu banco. Monto: <strong>$25.000</strong>
+      </p>
+      <div id="fee-admin-confirm-wrap" style="display:none;border-top:1px solid var(--line);padding-top:12px;">
+        <p style="font-size:0.75rem;color:var(--muted);font-family:var(--sans);margin-bottom:8px;">Admin: confirmá el pago una vez que lo veas en la app de Alfonso.</p>
+        <button id="fee-confirm-btn" onclick="confirmFeeFromModal()" style="width:100%;background:var(--green);color:#fff;border:none;border-radius:10px;padding:11px;font-size:0.88rem;font-weight:700;cursor:pointer;font-family:var(--sans);">✅ Confirmar pago recibido</button>
+      </div>
     </div>
   </div>
 
@@ -2071,13 +2102,16 @@
       return;
     }
 
-    // Cargar attendance y formation de todas las fechas en paralelo
-    const [attSnap, formSnap] = await Promise.all([
+    // Cargar attendance, formation y payments en paralelo
+    const curMonth = new Date().toISOString().slice(0,7); // YYYY-MM
+    const [attSnap, formSnap, paySnap] = await Promise.all([
       ST.fbDb.ref('attendance').once('value'),
       ST.fbDb.ref('formation').once('value'),
+      ST.fbDb.ref(`payments/${curMonth}`).once('value'),
     ]);
     const allAtt  = attSnap.val()  || {};
     const allForm = formSnap.val() || {};
+    const curPays = paySnap.val()  || {};
 
     // Jugadores: todos los que están en la LBF o aparecieron alguna vez en attendance
     const playerSet = new Set(ST.lbf.map(p => p.name));
@@ -2126,6 +2160,28 @@
     // Columnas = past matches
     const cols = past.map(m => `<th title="${fmtDate(m.fecha)} vs ${rival(m)}">F${m.rueda}</th>`).join('');
 
+    // Helper: celda de FEE para un jugador
+    function feeCell(name) {
+      const key   = fbKey(name);
+      const paid  = curPays[key]?.paid;
+      if (paid) {
+        const paidAt = curPays[key].paidAt ? new Date(curPays[key].paidAt).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit'}) : '';
+        if (ST.isAdmin) {
+          return `<td class="fee-col hcell-fee-paid admin-ok" title="Pagado${paidAt?' el '+paidAt:''}. Click para desmarcar." onclick="toggleFeePayment('${esc(name)}','${curMonth}',true)">✅</td>`;
+        }
+        return `<td class="fee-col hcell-fee-paid" title="Pagado${paidAt?' el '+paidAt:''}">✅</td>`;
+      }
+      // No pagado
+      const isSelf = ST.player && normalizeName(name) === normalizeName(ST.player);
+      if (ST.isAdmin) {
+        return `<td class="fee-col" title="Sin pagar — click para confirmar"><button class="fee-pay-btn" onclick="showFeeModal('${esc(name)}','${curMonth}',false)">💳</button></td>`;
+      }
+      if (isSelf) {
+        return `<td class="fee-col" title="Pendiente de pago"><button class="fee-pay-btn" onclick="showFeeModal('${esc(name)}','${curMonth}',false)">💳</button></td>`;
+      }
+      return `<td class="fee-col hcell-none" title="Sin pagar">—</td>`;
+    }
+
     // Filas por jugador
     const rows = players.map(name => {
       const cells = past.map(m => {
@@ -2143,8 +2199,14 @@
         <td class="hcell-played fbold">${t.played}</td>
         <td class="hcell-conf fbold">${t.conf}</td>
         <td class="hcell-dec fbold">${t.dec}</td>
+        ${feeCell(name)}
       </tr>`;
     }).join('');
+
+    // Mes formateado para mostrar
+    const [yy,mm] = curMonth.split('-');
+    const monthNames = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+    const monthLabel = `${monthNames[parseInt(mm,10)-1]} ${yy}`;
 
     wrap.innerHTML = `
       <div class="hist-scroll">
@@ -2156,6 +2218,7 @@
               <th title="Partidos jugados">🎾</th>
               <th title="Veces que confirmó">✓</th>
               <th title="Veces que declinó">✗</th>
+              <th class="fee-col" title="Fee capitanía ${monthLabel}">💰</th>
             </tr>
           </thead>
           <tbody>${rows}</tbody>
@@ -2166,10 +2229,74 @@
         <span style="color:var(--green);">✓ Confirmó asistencia</span>
         <span>✗ Declinó</span>
         <span>· Sin respuesta</span>
+        <span>💰 Fee capitanía ${monthLabel} · ✅ Pagado · <span style="border:1px solid var(--bordo);color:var(--bordo);border-radius:4px;padding:0 3px;font-size:0.65rem;">💳</span> Pendiente</span>
       </div>
     `;
     _historyLoaded = true;
   }
+
+  // ── FEE CAPITANÍA ─────────────────────────────────────────────
+  const FEE_CVU    = '0000003100071780662081';
+  const FEE_AMOUNT = 25000;
+  let _feeModalPlayer = null;
+  let _feeModalMonth  = null;
+
+  function showFeeModal(playerName, yearMonth, isPaid) {
+    _feeModalPlayer = playerName;
+    _feeModalMonth  = yearMonth;
+    const adminWrap = document.getElementById('fee-admin-confirm-wrap');
+    const confirmBtn = document.getElementById('fee-confirm-btn');
+    if (adminWrap) {
+      if (ST.isAdmin && !isPaid) {
+        adminWrap.style.display = 'block';
+        confirmBtn.textContent = '✅ Confirmar pago recibido';
+        confirmBtn.disabled = false;
+      } else {
+        adminWrap.style.display = 'none';
+      }
+    }
+    document.getElementById('modal-fee-payment').classList.remove('hidden');
+  }
+
+  function copyCVU() {
+    navigator.clipboard.writeText(FEE_CVU).then(() => {
+      toast('✅ CVU copiado al portapapeles');
+    }).catch(() => {
+      // fallback
+      const el = document.getElementById('fee-cvu-display');
+      const range = document.createRange();
+      range.selectNode(el);
+      window.getSelection().removeAllRanges();
+      window.getSelection().addRange(range);
+      toast('Seleccioná y copiá el CVU');
+    });
+  }
+
+  async function confirmFeeFromModal() {
+    if (!ST.isAdmin || !_feeModalPlayer || !_feeModalMonth) return;
+    const btn = document.getElementById('fee-confirm-btn');
+    btn.disabled = true;
+    btn.textContent = 'Guardando…';
+    await toggleFeePayment(_feeModalPlayer, _feeModalMonth, false);
+    document.getElementById('modal-fee-payment').classList.add('hidden');
+  }
+
+  async function toggleFeePayment(playerName, yearMonth, currentlyPaid) {
+    if (!ST.isAdmin || !ST.fbDb) { toast('Solo el admin puede confirmar pagos'); return; }
+    const key  = fbKey(playerName);
+    const path = `payments/${yearMonth}/${key}`;
+    if (currentlyPaid) {
+      await ST.fbDb.ref(path).remove();
+      toast('↩️ Pago desmarcado');
+    } else {
+      await ST.fbDb.ref(path).set({ paid: true, paidAt: new Date().toISOString(), confirmedBy: ST.player });
+      toast(`✅ Pago de ${playerName.split(' ')[0]} confirmado`);
+    }
+    // Recargar historial
+    _historyLoaded = false;
+    loadPlayerHistory();
+  }
+  // ──────────────────────────────────────────────────────────────
 
   function saveLBF(){localStorage.setItem('lbf',JSON.stringify(ST.lbf));if(ST.fbDb)ST.fbDb.ref('lbf').set(ST.lbf);}
 
