@@ -644,7 +644,7 @@
       <div class="empty"><div class="ei">💬</div><h3>El chat está vacío</h3><p>¡Rompé el hielo!</p></div>
     </div>
     <div class="chat-input-area">
-      <input class="chat-inp" id="chat-inp" type="text" placeholder="Escribí un mensaje…"
+      <input class="chat-inp" id="chat-inp" type="text" placeholder="Escribí un mensaje…" maxlength="500"
              onkeypress="if(event.key==='Enter') sendChat()">
       <button class="chat-send" onclick="sendChat()">➤</button>
     </div>
@@ -846,7 +846,7 @@
     fbKey:          'fbDbUrl',
     // URL de la base de datos — hardcodeada para que funcione en todos los dispositivos sin configuración
     fbDefaultUrl:   'https://los-disidentes-app-default-rtdb.firebaseio.com',
-    bootstrapAdmin: 'PABLO',   // ← nombre del admin principal (en mayúsculas)
+    bootstrapAdmin: 'PABLO AEID',   // ← nombre completo exacto del admin principal
   };
 
   // ═══════════════════════════════════════════
@@ -942,6 +942,8 @@
     return (n || '').trim().toUpperCase().replace(/\s+/g, ' ');
   }
 
+  const NAME_RE = /^[A-ZÁÉÍÓÚÜÑ ]{2,}$/;
+
   async function tryLogin() {
     const firstName = normalizeName(document.getElementById('pname-first').value);
     const lastName  = normalizeName(document.getElementById('pname-last').value);
@@ -950,8 +952,19 @@
     const errEl = document.getElementById('auth-error');
     const btn   = document.getElementById('auth-btn');
 
-    if (!firstName || firstName.length < 2) { errEl.textContent = '⚠️ Ingresá tu nombre'; document.getElementById('pname-first').focus(); return; }
-    if (!lastName  || lastName.length  < 2) { errEl.textContent = '⚠️ Ingresá tu apellido'; document.getElementById('pname-last').focus(); return; }
+    // BUG-04: Rate limiting — bloqueo tras 5 intentos fallidos (5 min)
+    const lockKey = 'loginLockUntil';
+    const attKey  = 'loginAttempts';
+    const lockUntil = parseInt(localStorage.getItem(lockKey) || '0');
+    if (Date.now() < lockUntil) {
+      const minLeft = Math.ceil((lockUntil - Date.now()) / 60000);
+      errEl.textContent = `🔒 Demasiados intentos. Esperá ${minLeft} minuto${minLeft>1?'s':''}.`;
+      return;
+    }
+
+    // BUG-07 / BUG-12: Validar formato de nombre con regex (independiente del filtro oninput)
+    if (!firstName || firstName.length < 2 || !NAME_RE.test(firstName)) { errEl.textContent = '⚠️ Ingresá tu nombre (solo letras)'; document.getElementById('pname-first').focus(); return; }
+    if (!lastName  || lastName.length  < 2 || !NAME_RE.test(lastName))  { errEl.textContent = '⚠️ Ingresá tu apellido (solo letras)'; document.getElementById('pname-last').focus(); return; }
     if (pin.length !== 4)                    { errEl.textContent = '⚠️ PIN debe ser 4 dígitos'; document.getElementById('pin-0').focus(); return; }
 
     errEl.textContent = '';
@@ -965,11 +978,22 @@
         if (existing) {
           // Jugador registrado → verificar PIN
           if (existing.pin !== pin) {
-            errEl.textContent = '❌ PIN incorrecto. Intentá de nuevo.';
+            // BUG-04: contar intentos fallidos
+            const attempts = parseInt(localStorage.getItem(attKey) || '0') + 1;
+            if (attempts >= 5) {
+              localStorage.setItem(lockKey, Date.now() + 5 * 60 * 1000);
+              localStorage.setItem(attKey, '0');
+              errEl.textContent = '🔒 5 intentos fallidos. Bloqueado 5 minutos.';
+            } else {
+              localStorage.setItem(attKey, attempts);
+              errEl.textContent = `❌ PIN incorrecto. Intentos restantes: ${5 - attempts}`;
+            }
             clearPinFields(); document.getElementById('pin-0').focus();
             btn.textContent = 'Entrar al equipo 🎾'; btn.disabled = false;
             return;
           }
+          // PIN correcto → resetear contador
+          localStorage.removeItem(attKey); localStorage.removeItem(lockKey);
           // PIN correcto → actualizar lastLogin
           ST.fbDb.ref(`players/${fbKey(name)}/lastLogin`).set(Date.now());
         } else {
@@ -1048,14 +1072,13 @@
   // Helper: ¿es el admin principal (por nombre de pila)?
   function isBootstrapAdmin() {
     if (!ST.player) return false;
-    const firstWord = normalizeName(ST.player).split(' ')[0];
-    return ST.player === CFG.bootstrapAdmin || firstWord === CFG.bootstrapAdmin;
+    // Comparación exacta de nombre completo — no por primer nombre
+    return normalizeName(ST.player) === normalizeName(CFG.bootstrapAdmin);
   }
 
   function checkAdmin() {
-    // Bootstrap: soporta nombre simple "PABLO" y con apellido "PABLO JABALOYAS"
-    const firstWord = normalizeName(ST.player || '').split(' ')[0];
-    if (ST.player === CFG.bootstrapAdmin || firstWord === CFG.bootstrapAdmin) {
+    // Bootstrap: comparación exacta con el nombre completo del admin principal
+    if (normalizeName(ST.player || '') === normalizeName(CFG.bootstrapAdmin)) {
       ST.isAdmin = true;
       applyAdminUI();
       return;
@@ -1110,23 +1133,37 @@
       ${entries.map(([key, p]) => {
         const isAdm = !!admins[key];
         const date  = p.lastLogin ? new Date(p.lastLogin).toLocaleDateString('es-AR',{day:'numeric',month:'short'}) : '—';
+        // BUG-07: usar esc() para nombres en innerHTML; data-attrs para onclick
         return `<div class="padmin-row">
           <div>
-            <div class="tsm fbold">${p.name} ${isAdm ? '👑' : ''}</div>
+            <div class="tsm fbold">${esc(p.name)} ${isAdm ? '👑' : ''}</div>
             <div class="txs tmuted">Último acceso: ${date}</div>
           </div>
           <div class="padmin-actions">
-            <button class="padmin-btn" onclick="adminResetPin('${p.name}')" title="Resetear PIN">🔑 PIN</button>
+            <button class="padmin-btn" data-pname="${esc(p.name)}" data-action="resetpin" title="Resetear PIN">🔑 PIN</button>
             ${!isAdm
-              ? `<button class="padmin-btn" onclick="adminToggleAdmin('${p.name}','${key}',true)" title="Hacer admin">👑</button>`
-              : `<button class="padmin-btn" onclick="adminToggleAdmin('${p.name}','${key}',false)" title="Quitar admin">−👑</button>`}
-            <button class="padmin-btn del" onclick="adminRemovePlayer('${p.name}','${key}')" title="Eliminar registro">🗑</button>
+              ? `<button class="padmin-btn" data-pname="${esc(p.name)}" data-pkey="${key}" data-action="makeadmin" title="Hacer admin">👑</button>`
+              : `<button class="padmin-btn" data-pname="${esc(p.name)}" data-pkey="${key}" data-action="removeadmin" title="Quitar admin">−👑</button>`}
+            <button class="padmin-btn del" data-pname="${esc(p.name)}" data-pkey="${key}" data-action="removeplayer" title="Eliminar registro">🗑</button>
           </div>
         </div>`;
       }).join('')}
       <div class="separator"></div>
       <button class="btn btn-o btn-full btn-sm" onclick="renderAdmin()">🔄 Actualizar lista</button>
     `;
+
+    // BUG-07: event delegation — evita onclick con nombres en HTML
+    wrap.addEventListener('click', e => {
+      const btn = e.target.closest('[data-action]');
+      if (!btn) return;
+      const action = btn.dataset.action;
+      const pname  = btn.dataset.pname || '';
+      const pkey   = btn.dataset.pkey  || '';
+      if (action === 'resetpin')    adminResetPin(pname);
+      if (action === 'makeadmin')   adminToggleAdmin(pname, pkey, true);
+      if (action === 'removeadmin') adminToggleAdmin(pname, pkey, false);
+      if (action === 'removeplayer') adminRemovePlayer(pname, pkey);
+    }, { once: true });
   }
 
   async function adminResetPin(name) {
@@ -1230,6 +1267,22 @@
           await ST.fbDb.ref(`config/admins/${oldKey}`).remove();
         }
 
+        // BUG-05: Migrar LBF — actualizar el nombre en el array
+        const lbfSnap = await ST.fbDb.ref('lbf').once('value');
+        const lbfArr = lbfSnap.val();
+        if (Array.isArray(lbfArr)) {
+          const updatedLbf = lbfArr.map(p => normalizeName(p.name||'') === normalizeName(ST.player) ? {...p, name: newName} : p);
+          await ST.fbDb.ref('lbf').set(updatedLbf);
+          ST.lbf = updatedLbf;
+          localStorage.setItem('lbf', JSON.stringify(updatedLbf));
+        }
+        // BUG-05: Migrar payments del mes actual
+        const curMonth = new Date().toISOString().slice(0,7);
+        const paySnap = await ST.fbDb.ref(`payments/${curMonth}/${oldKey}`).once('value');
+        if (paySnap.val()) {
+          await ST.fbDb.ref(`payments/${curMonth}/${newKey}`).set(paySnap.val());
+          await ST.fbDb.ref(`payments/${curMonth}/${oldKey}`).remove();
+        }
         // Actualizar presencia
         ST.fbDb.ref(`presence/${oldKey}`).remove();
       } catch(e) {
@@ -1258,8 +1311,10 @@
     toast(`✅ Nombre actualizado a ${newName}`);
   }
   function logout() {
-    localStorage.removeItem('playerName');
-    localStorage.removeItem('playerPin');
+    // BUG-11: limpiar toda la caché local, no solo las credenciales
+    ['playerName','playerPin','lbf','fixture','standings','lbfLocked',
+     'lastFetch','lastChatSeen','loginAttempts','loginLockUntil']
+      .forEach(k => localStorage.removeItem(k));
     location.reload();
   }
 
@@ -1545,7 +1600,10 @@
     return `${days[d.getDay()]} ${d.getDate()} ${months[d.getMonth()]}`;
   }
   function rival(m) { return m?(m.home?m.visitor:m.local):''; }
-  function fbKey(n)  { return (n||'').trim().replace(/[.#$\[\]\/ ]/g,'_'); }
+  function fbKey(n)  {
+    // Espacio → '--' (distinto de guion bajo, evita colisiones entre "ANA GARCIA" y "ANA_GARCIA")
+    return (n||'').trim().replace(/ /g,'--').replace(/[.#$\[\]\/]/g,'_');
+  }
   function esc(s)    { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
   // ═══════════════════════════════════════════
@@ -1847,6 +1905,8 @@
     const inp=document.getElementById('chat-inp'), text=inp.value.trim();
     if (!text) return;
     if (!ST.player) { toast('Iniciá sesión para chatear'); return; }
+    // BUG-10: limitar longitud del mensaje
+    if (text.length > 500) { toast('⚠️ El mensaje no puede superar los 500 caracteres'); return; }
     inp.value = '';
     const msg = { player: ST.player, text, ts: Date.now() };
     if (ST.fbDb) await ST.fbDb.ref('chat').push(msg);
@@ -2279,18 +2339,19 @@
       const lastName  = esc((name.split(' ')[1] || '').charAt(0) + (name.split(' ')[1] ? '.' : ''));
 
       let statusCell;
+      // BUG-08: data-attrs en lugar de onclick con nombre interpolado
       if (isPaid) {
         const label = paidAt ? `✅ ${paidAt}` : '✅ Pagado';
         if (ST.isAdmin) {
-          statusCell = `<span class="fee-status-paid" style="cursor:pointer;" title="Click para desmarcar" onclick="toggleFeePayment('${esc(name)}','${curMonth}',true)">${label}</span>`;
+          statusCell = `<span class="fee-status-paid fee-action" style="cursor:pointer;" title="Click para desmarcar" data-fee-action="unpay" data-fee-name="${esc(name)}" data-fee-month="${curMonth}">${label}</span>`;
         } else {
           statusCell = `<span class="fee-status-paid">${label}</span>`;
         }
       } else {
         if (ST.isAdmin) {
-          statusCell = `<button class="fee-pay-btn" onclick="showFeeModal('${esc(name)}','${curMonth}',false)">💳 Confirmar</button>`;
+          statusCell = `<button class="fee-pay-btn fee-action" data-fee-action="confirm" data-fee-name="${esc(name)}" data-fee-month="${curMonth}">💳 Confirmar</button>`;
         } else if (isSelf) {
-          statusCell = `<button class="fee-pay-btn" onclick="showFeeModal('${esc(name)}','${curMonth}',false)">💳 Ver cómo pagar</button>`;
+          statusCell = `<button class="fee-pay-btn fee-action" data-fee-action="modal" data-fee-name="${esc(name)}" data-fee-month="${curMonth}">💳 Ver cómo pagar</button>`;
         } else {
           statusCell = `<span style="color:var(--muted);font-size:0.78rem;">Pendiente</span>`;
         }
@@ -2317,6 +2378,18 @@
       <div>${rows}</div>
     `;
     _feeCardLoaded = true;
+
+    // BUG-08: event delegation — maneja data-fee-action sin onclick interpolado
+    wrap.addEventListener('click', e => {
+      const el = e.target.closest('[data-fee-action]');
+      if (!el) return;
+      const action = el.dataset.feeAction;
+      const name   = el.dataset.feeName;
+      const month  = el.dataset.feeMonth;
+      if (action === 'unpay')   toggleFeePayment(name, month, true);
+      if (action === 'confirm') showFeeModal(name, month, false);
+      if (action === 'modal')   showFeeModal(name, month, false);
+    });
   }
 
   function showFeeModal(playerName, yearMonth, isPaid) {
@@ -2397,7 +2470,7 @@
     if (tab==='asistencia')                            renderAtt();
     if (tab==='parejas')                               renderParejas();
     if (tab==='rendimientos' && !ST.perfLoaded)        renderRend();
-    if (tab==='lbf') { _historyLoaded = false; renderLBF(); if(ST.isAdmin && ST.fbDb) renderAdmin(); updateInstallCard(); }
+    if (tab==='lbf') { _historyLoaded = false; _feeCardLoaded = false; renderLBF(); if(ST.isAdmin && ST.fbDb) renderAdmin(); updateInstallCard(); }
     if (tab==='chat') {
       renderChat();
       document.getElementById('badge-chat').classList.add('hidden');
