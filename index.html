@@ -383,12 +383,9 @@
     .hist-stat     { background:var(--paper); border:1px solid var(--line); border-radius:10px; padding:9px 14px; text-align:center; flex:1; min-width:70px; box-shadow:var(--shadow); }
     .hist-stat .hn { font-size:1.3rem; font-weight:700; color:var(--green-dk); font-family:var(--serif); }
     .hist-stat .hl { font-size:0.62rem; color:var(--muted); margin-top:2px; font-family:var(--sans); font-weight:700; text-transform:uppercase; letter-spacing:.5px; }
-    .hcell-fee-paid   { color:var(--green); font-size:1rem; cursor:default; }
-    .hcell-fee-paid.admin-ok { cursor:pointer; }
-    .fee-pay-btn  { background:none; border:1.5px solid var(--bordo); color:var(--bordo); border-radius:6px; padding:2px 5px; font-size:0.65rem; font-weight:700; cursor:pointer; font-family:var(--sans); white-space:nowrap; }
+    .fee-pay-btn     { background:none; border:1.5px solid var(--bordo); color:var(--bordo); border-radius:8px; padding:5px 11px; font-size:0.78rem; font-weight:700; cursor:pointer; font-family:var(--sans); white-space:nowrap; }
     .fee-pay-btn:active { opacity:0.7; }
-    .hist-table th.fee-col { background:var(--bordo); }
-    .hist-table td.fee-col { background:rgba(110,31,51,0.04); }
+    .fee-status-paid { color:var(--green); font-size:0.82rem; font-weight:700; font-family:var(--sans); }
 
     /* ── TOAST ───────────────────────────────────── */
     .toast { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); background: var(--ink); color: #fff; border-radius: 10px; padding: 10px 20px; font-size: 0.84rem; z-index: 200; animation: su .3s ease; max-width: 300px; text-align: center; pointer-events: none; box-shadow: 0 6px 20px rgba(0,0,0,0.28); font-family: var(--sans); font-weight: 600; }
@@ -713,6 +710,15 @@
         <span id="history-toggle-icon" style="font-size:0.8rem;color:var(--muted);">▼ Ver</span>
       </div>
       <div id="history-wrap" style="display:none;"></div>
+    </div>
+
+    <!-- Fee Capitanía -->
+    <div class="card" id="fee-card">
+      <div class="card-title" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;" onclick="toggleFeeCard()">
+        <span>💰 Fee Capitanía</span>
+        <span id="fee-toggle-icon" style="font-size:0.8rem;color:var(--muted);">▼ Ver</span>
+      </div>
+      <div id="fee-card-wrap" style="display:none;"></div>
     </div>
 
     <!-- Panel Admin — solo visible para admin -->
@@ -2102,16 +2108,13 @@
       return;
     }
 
-    // Cargar attendance, formation y payments en paralelo
-    const curMonth = new Date().toISOString().slice(0,7); // YYYY-MM
-    const [attSnap, formSnap, paySnap] = await Promise.all([
+    // Cargar attendance y formation en paralelo
+    const [attSnap, formSnap] = await Promise.all([
       ST.fbDb.ref('attendance').once('value'),
       ST.fbDb.ref('formation').once('value'),
-      ST.fbDb.ref(`payments/${curMonth}`).once('value'),
     ]);
     const allAtt  = attSnap.val()  || {};
     const allForm = formSnap.val() || {};
-    const curPays = paySnap.val()  || {};
 
     // Jugadores: todos los que están en la LBF o aparecieron alguna vez en attendance
     const playerSet = new Set(ST.lbf.map(p => p.name));
@@ -2160,28 +2163,6 @@
     // Columnas = past matches
     const cols = past.map(m => `<th title="${fmtDate(m.fecha)} vs ${rival(m)}">F${m.rueda}</th>`).join('');
 
-    // Helper: celda de FEE para un jugador
-    function feeCell(name) {
-      const key   = fbKey(name);
-      const paid  = curPays[key]?.paid;
-      if (paid) {
-        const paidAt = curPays[key].paidAt ? new Date(curPays[key].paidAt).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit'}) : '';
-        if (ST.isAdmin) {
-          return `<td class="fee-col hcell-fee-paid admin-ok" title="Pagado${paidAt?' el '+paidAt:''}. Click para desmarcar." onclick="toggleFeePayment('${esc(name)}','${curMonth}',true)">✅</td>`;
-        }
-        return `<td class="fee-col hcell-fee-paid" title="Pagado${paidAt?' el '+paidAt:''}">✅</td>`;
-      }
-      // No pagado
-      const isSelf = ST.player && normalizeName(name) === normalizeName(ST.player);
-      if (ST.isAdmin) {
-        return `<td class="fee-col" title="Sin pagar — click para confirmar"><button class="fee-pay-btn" onclick="showFeeModal('${esc(name)}','${curMonth}',false)">💳</button></td>`;
-      }
-      if (isSelf) {
-        return `<td class="fee-col" title="Pendiente de pago"><button class="fee-pay-btn" onclick="showFeeModal('${esc(name)}','${curMonth}',false)">💳</button></td>`;
-      }
-      return `<td class="fee-col hcell-none" title="Sin pagar">—</td>`;
-    }
-
     // Filas por jugador
     const rows = players.map(name => {
       const cells = past.map(m => {
@@ -2199,14 +2180,8 @@
         <td class="hcell-played fbold">${t.played}</td>
         <td class="hcell-conf fbold">${t.conf}</td>
         <td class="hcell-dec fbold">${t.dec}</td>
-        ${feeCell(name)}
       </tr>`;
     }).join('');
-
-    // Mes formateado para mostrar
-    const [yy,mm] = curMonth.split('-');
-    const monthNames = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-    const monthLabel = `${monthNames[parseInt(mm,10)-1]} ${yy}`;
 
     wrap.innerHTML = `
       <div class="hist-scroll">
@@ -2218,7 +2193,6 @@
               <th title="Partidos jugados">🎾</th>
               <th title="Veces que confirmó">✓</th>
               <th title="Veces que declinó">✗</th>
-              <th class="fee-col" title="Fee capitanía ${monthLabel}">💰</th>
             </tr>
           </thead>
           <tbody>${rows}</tbody>
@@ -2229,7 +2203,6 @@
         <span style="color:var(--green);">✓ Confirmó asistencia</span>
         <span>✗ Declinó</span>
         <span>· Sin respuesta</span>
-        <span>💰 Fee capitanía ${monthLabel} · ✅ Pagado · <span style="border:1px solid var(--bordo);color:var(--bordo);border-radius:4px;padding:0 3px;font-size:0.65rem;">💳</span> Pendiente</span>
       </div>
     `;
     _historyLoaded = true;
@@ -2240,6 +2213,91 @@
   const FEE_AMOUNT = 25000;
   let _feeModalPlayer = null;
   let _feeModalMonth  = null;
+  let _feeCardLoaded  = false;
+
+  function toggleFeeCard() {
+    const wrap = document.getElementById('fee-card-wrap');
+    const icon = document.getElementById('fee-toggle-icon');
+    const open = wrap.style.display !== 'none';
+    wrap.style.display = open ? 'none' : 'block';
+    icon.textContent = open ? '▼ Ver' : '▲ Ocultar';
+    if (!open && !_feeCardLoaded) loadFeeCard();
+  }
+
+  async function loadFeeCard() {
+    const wrap = document.getElementById('fee-card-wrap');
+    if (!ST.fbDb) { wrap.innerHTML = '<div class="txs tmuted">Requiere conexión a Firebase.</div>'; return; }
+    wrap.innerHTML = '<div class="tcenter" style="padding:14px;"><span class="spin"></span></div>';
+
+    const curMonth = new Date().toISOString().slice(0,7);
+    const [yy, mm] = curMonth.split('-');
+    const monthNames = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+    const monthLabel = `${monthNames[parseInt(mm,10)-1]} ${yy}`;
+
+    const paySnap = await ST.fbDb.ref(`payments/${curMonth}`).once('value');
+    const pays = paySnap.val() || {};
+
+    const players = ST.lbf.map(p => p.name);
+    if (!players.length) {
+      wrap.innerHTML = '<div class="txs tmuted tcenter" style="padding:10px;">No hay jugadores en el equipo.</div>';
+      return;
+    }
+
+    const paid   = players.filter(n => pays[fbKey(n)]?.paid);
+    const unpaid = players.filter(n => !pays[fbKey(n)]?.paid);
+    const total  = players.length;
+    const pct    = total ? Math.round((paid.length / total) * 100) : 0;
+
+    const rows = players.map(name => {
+      const key    = fbKey(name);
+      const isPaid = pays[key]?.paid;
+      const paidAt = isPaid && pays[key].paidAt
+        ? new Date(pays[key].paidAt).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit'})
+        : null;
+      const isSelf = ST.player && normalizeName(name) === normalizeName(ST.player);
+      const firstName = esc(name.split(' ')[0]);
+      const lastName  = esc((name.split(' ')[1] || '').charAt(0) + (name.split(' ')[1] ? '.' : ''));
+
+      let statusCell;
+      if (isPaid) {
+        const label = paidAt ? `✅ ${paidAt}` : '✅ Pagado';
+        if (ST.isAdmin) {
+          statusCell = `<span class="fee-status-paid" style="cursor:pointer;" title="Click para desmarcar" onclick="toggleFeePayment('${esc(name)}','${curMonth}',true)">${label}</span>`;
+        } else {
+          statusCell = `<span class="fee-status-paid">${label}</span>`;
+        }
+      } else {
+        if (ST.isAdmin) {
+          statusCell = `<button class="fee-pay-btn" onclick="showFeeModal('${esc(name)}','${curMonth}',false)">💳 Confirmar</button>`;
+        } else if (isSelf) {
+          statusCell = `<button class="fee-pay-btn" onclick="showFeeModal('${esc(name)}','${curMonth}',false)">💳 Ver cómo pagar</button>`;
+        } else {
+          statusCell = `<span style="color:var(--muted);font-size:0.78rem;">Pendiente</span>`;
+        }
+      }
+
+      return `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--line);">
+        <span style="font-family:var(--sans);font-size:0.88rem;font-weight:700;color:var(--ink);">${firstName} ${lastName}</span>
+        ${statusCell}
+      </div>`;
+    }).join('');
+
+    wrap.innerHTML = `
+      <div style="margin-bottom:14px;">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+          <div style="flex:1;height:8px;background:var(--line);border-radius:99px;overflow:hidden;">
+            <div style="height:100%;width:${pct}%;background:var(--green);border-radius:99px;transition:width .4s;"></div>
+          </div>
+          <span style="font-size:0.78rem;font-weight:700;color:var(--green-dk);font-family:var(--sans);white-space:nowrap;">${paid.length}/${total} pagaron</span>
+        </div>
+        <p style="font-size:0.73rem;color:var(--muted);font-family:var(--sans);margin:0;">
+          Fee mensual $25.000 → Alfonso Chala · ${monthLabel}
+        </p>
+      </div>
+      <div>${rows}</div>
+    `;
+    _feeCardLoaded = true;
+  }
 
   function showFeeModal(playerName, yearMonth, isPaid) {
     _feeModalPlayer = playerName;
@@ -2292,9 +2350,9 @@
       await ST.fbDb.ref(path).set({ paid: true, paidAt: new Date().toISOString(), confirmedBy: ST.player });
       toast(`✅ Pago de ${playerName.split(' ')[0]} confirmado`);
     }
-    // Recargar historial
-    _historyLoaded = false;
-    loadPlayerHistory();
+    // Recargar fee card
+    _feeCardLoaded = false;
+    loadFeeCard();
   }
   // ──────────────────────────────────────────────────────────────
 
