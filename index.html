@@ -314,6 +314,42 @@
     .ios-step .step-txt { flex: 1; font-size: 0.84rem; color: var(--ink); line-height: 1.5; }
     .ios-step .step-txt strong { color: var(--green-dk); display: block; margin-bottom: 2px; }
 
+    /* ── GALERÍA ─────────────────────────────────── */
+    .gallery-upload-btn {
+      display: flex; align-items: center; gap: 12px;
+      background: var(--green); color: #fff; border-radius: 12px;
+      padding: 14px 18px; cursor: pointer; margin-bottom: 14px;
+      border: none; width: 100%; font-family: var(--sans); text-align: left;
+      transition: background .2s;
+    }
+    .gallery-upload-btn:hover { background: var(--green-dk); }
+    .gallery-upload-btn .gu-icon { font-size: 1.6rem; flex-shrink: 0; }
+    .gallery-upload-btn .gu-txt strong { display: block; font-size: 0.88rem; font-weight: 700; }
+    .gallery-upload-btn .gu-txt span { font-size: 0.72rem; opacity: 0.8; }
+    .gallery-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px;
+    }
+    .gallery-item {
+      aspect-ratio: 1; position: relative; overflow: hidden;
+      border-radius: 6px; cursor: pointer; background: var(--line);
+    }
+    .gallery-item img {
+      width: 100%; height: 100%; object-fit: cover;
+      transition: transform .3s;
+    }
+    .gallery-item:hover img { transform: scale(1.05); }
+    .gallery-item .gi-meta {
+      position: absolute; bottom: 0; left: 0; right: 0;
+      background: linear-gradient(transparent, rgba(0,0,0,0.65));
+      padding: 16px 5px 5px; color: #fff; font-size: 0.62rem; font-weight: 600;
+    }
+    .gallery-upload-progress {
+      background: rgba(28,91,58,0.08); border: 1px solid rgba(28,91,58,0.2);
+      border-radius: 8px; padding: 12px 16px; margin-bottom: 10px;
+      font-size: 0.8rem; color: var(--green-dk); display: flex; align-items: center; gap: 10px;
+    }
+    .gallery-caption-modal .modal-box { max-width: 360px; }
+
     /* ── HISTORIAL ───────────────────────────────── */
     .hist-table { width:100%; border-collapse:collapse; font-size:0.72rem; }
     .hist-table th { background:var(--green-dk); color:#fff; padding:5px 7px; text-align:center; font-weight:600; white-space:nowrap; }
@@ -384,6 +420,24 @@
     <button class="ib-close" onclick="dismissInstall()" title="Cerrar">✕</button>
   </div>
 
+  <!-- LIGHTBOX GALERÍA -->
+  <div id="gallery-lightbox" class="modal-ov hidden" onclick="if(event.target===this)closeLightbox()">
+    <div style="position:relative;max-width:96vw;max-height:92vh;display:flex;flex-direction:column;align-items:center;">
+      <button onclick="closeLightbox()" style="position:absolute;top:-36px;right:0;background:none;border:none;color:#fff;font-size:1.6rem;cursor:pointer;line-height:1;">✕</button>
+      <img id="lb-img" src="" alt="" style="max-width:96vw;max-height:72vh;object-fit:contain;border-radius:10px;">
+      <div style="background:rgba(0,0,0,0.65);border-radius:0 0 10px 10px;padding:10px 16px;width:100%;box-sizing:border-box;">
+        <div id="lb-caption" style="color:#fff;font-size:0.88rem;margin-bottom:4px;"></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <div id="lb-meta" style="color:rgba(255,255,255,0.65);font-size:0.72rem;"></div>
+          <button id="lb-delete-btn" onclick="deleteGalleryPhoto()" style="background:rgba(111,61,146,0.7);border:none;border-radius:6px;color:#fff;font-size:0.72rem;padding:4px 10px;cursor:pointer;display:none;">🗑 Eliminar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- INPUT FILE OCULTO PARA GALERÍA -->
+  <input type="file" id="gallery-file-input" accept="image/*" style="display:none" onchange="handleGalleryFile(event)">
+
   <!-- MODAL INSTRUCCIONES iOS -->
   <div id="ios-modal" class="modal-ov hidden">
     <div class="modal-box" style="max-width:360px;">
@@ -434,6 +488,7 @@
     <button class="nav-btn"        data-tab="chat"         onclick="switchTab('chat')">         <span class="ni">💬</span>Chat<span class="nbadge hidden" id="badge-chat">0</span></button>
     <button class="nav-btn"        data-tab="rendimientos" onclick="switchTab('rendimientos')"> <span class="ni">📊</span>Stats</button>
     <button class="nav-btn"        data-tab="lbf"          onclick="switchTab('lbf')">          <span class="ni">⚙️</span>LBF</button>
+    <button class="nav-btn"        data-tab="galeria"      onclick="switchTab('galeria')">      <span class="ni">📷</span>Fotos</button>
   </nav>
 
   <!-- ════════ FIXTURE ════════ -->
@@ -469,6 +524,13 @@
       <input class="chat-inp" id="chat-inp" type="text" placeholder="Escribí un mensaje…"
              onkeypress="if(event.key==='Enter') sendChat()">
       <button class="chat-send" onclick="sendChat()">➤</button>
+    </div>
+  </section>
+
+  <!-- ════════ GALERÍA ════════ -->
+  <section id="tab-galeria" class="tab">
+    <div id="galeria-content">
+      <div class="tcenter" style="padding:28px"><span class="spin"></span></div>
     </div>
   </section>
 
@@ -983,6 +1045,7 @@
         localStorage.setItem('lbfLocked', ST.lbfLocked);
         if (ST.activeTab === 'lbf') renderLBF();
       });
+      initGallery();
       const nm = nextMatch();
       if (nm) watchAttendance(nm.id);
       ST.fbDb.ref('chat').limitToLast(120).on('value', s => {
@@ -1091,12 +1154,12 @@
   }
 
   async function refreshData(showFeedback = true) {
-    if (showFeedback) showToast('🔄 Actualizando datos de la liga…', 2000);
+    if (showFeedback) toast('🔄 Actualizando datos de la liga…', 2000);
     await Promise.all([loadFixture(), loadStandings()]);
     ST.lastFetch = Date.now();
     localStorage.setItem('lastFetch', ST.lastFetch);
     updateRefreshLabel();
-    if (showFeedback) showToast('✅ Datos actualizados', 2000);
+    if (showFeedback) toast('✅ Datos actualizados', 2000);
   }
 
   function updateRefreshLabel() {
@@ -1920,6 +1983,7 @@
     document.getElementById(`tab-${tab}`).classList.add('active');
     document.querySelector(`[data-tab="${tab}"]`).classList.add('active');
     if (tab==='fixture')                               updateRefreshLabel();
+    if (tab==='galeria')                               renderGallery();
     if (tab==='asistencia')                            renderAtt();
     if (tab==='parejas')                               renderParejas();
     if (tab==='rendimientos' && !ST.perfLoaded)        renderRend();
@@ -1975,6 +2039,182 @@
   document.addEventListener('DOMContentLoaded', init);
 
   // ═══════════════════════════════════════════
+  // GALERÍA DE FOTOS — ImgBB + Firebase
+  // ═══════════════════════════════════════════
+  let _galleryItems = {};      // {key: item}
+  let _lbCurrentKey = null;    // clave activa en lightbox
+
+  function initGallery() {
+    if (!ST.fbDb) return;
+    ST.fbDb.ref('gallery').on('value', snap => {
+      _galleryItems = snap.val() || {};
+      if (ST.activeTab === 'galeria') renderGallery();
+    });
+  }
+
+  function renderGallery() {
+    const wrap = document.getElementById('galeria-content');
+    if (!wrap) return;
+    const items = Object.entries(_galleryItems)
+      .sort((a,b) => (b[1].ts||0) - (a[1].ts||0));
+
+    const uploadBtn = ST.player
+      ? `<button class="gallery-upload-btn" onclick="document.getElementById('gallery-file-input').click()">
+           <span class="gu-icon">📸</span>
+           <div class="gu-txt"><strong>Subir foto</strong><span>JPG o PNG · máx 5 MB</span></div>
+         </button>`
+      : `<div class="txs tmuted" style="padding:10px 0 14px;">Iniciá sesión para subir fotos.</div>`;
+
+    if (!items.length) {
+      wrap.innerHTML = uploadBtn + `<div class="empty"><div class="ei">📷</div><h3>Sin fotos aún</h3><p>¡Subí la primera foto del equipo!</p></div>`;
+      return;
+    }
+
+    const grid = items.map(([key, p]) => `
+      <div class="gallery-item" onclick="openLightbox('${key}')">
+        <img src="${esc(p.thumb||p.url)}" alt="" loading="lazy">
+        <div class="gi-meta">${esc((p.uploader||'').split(' ')[0])}</div>
+      </div>`).join('');
+
+    wrap.innerHTML = uploadBtn + `<div class="gallery-grid">${grid}</div>`;
+  }
+
+  function handleGalleryFile(e) {
+    const file = e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) { toast('⚠️ La foto es muy grande (máx 10 MB)'); return; }
+    uploadGalleryPhoto(file);
+  }
+
+  async function uploadGalleryPhoto(file) {
+    if (!ST.player) { toast('Iniciá sesión para subir fotos'); return; }
+    const wrap = document.getElementById('galeria-content');
+
+    // Mostrar progreso
+    const prog = document.createElement('div');
+    prog.className = 'gallery-upload-progress';
+    prog.innerHTML = '<span class="spin"></span> Comprimiendo imagen…';
+    wrap.prepend(prog);
+
+    try {
+      // 1. Comprimir imagen
+      const base64 = await compressToBase64(file, 1200, 0.82);
+      prog.innerHTML = '<span class="spin"></span> Subiendo a ImgBB…';
+
+      // 2. Obtener API key de Firebase
+      const keySnap = await ST.fbDb.ref('config/imgbbKey').once('value');
+      const apiKey = keySnap.val();
+      if (!apiKey) { toast('⚠️ API key no configurada'); prog.remove(); return; }
+
+      // 3. Subir a ImgBB
+      const form = new FormData();
+      form.append('image', base64.split(',')[1]);
+      form.append('name', `disidentes_${Date.now()}`);
+      const r = await fetch(`https://api.imgbb.com/1/upload?key=${apiKey}`, { method:'POST', body:form });
+      const data = await r.json();
+      if (!data.success) { toast('❌ Error al subir la foto'); prog.remove(); return; }
+
+      // 4. Guardar en Firebase
+      const item = {
+        url:      data.data.url,
+        thumb:    data.data.thumb?.url || data.data.url,
+        uploader: ST.player,
+        ts:       Date.now(),
+        caption:  '',
+      };
+      const ref = await ST.fbDb.ref('gallery').push(item);
+
+      prog.remove();
+      toast('✅ ¡Foto subida!', 2500);
+
+      // Abrir lightbox para que el jugador agregue caption
+      _galleryItems[ref.key] = item;
+      openLightbox(ref.key, true);
+
+    } catch(err) {
+      prog.remove();
+      toast('❌ Error: ' + (err.message||'intentá de nuevo'));
+      console.error('Gallery upload error:', err);
+    }
+  }
+
+  function compressToBase64(file, maxPx, quality) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        let {width:w, height:h} = img;
+        if (w > maxPx || h > maxPx) {
+          if (w > h) { h = Math.round(h * maxPx / w); w = maxPx; }
+          else       { w = Math.round(w * maxPx / h); h = maxPx; }
+        }
+        const c = document.createElement('canvas');
+        c.width = w; c.height = h;
+        c.getContext('2d').drawImage(img, 0, 0, w, h);
+        resolve(c.toDataURL('image/jpeg', quality));
+      };
+      img.onerror = reject;
+      img.src = url;
+    });
+  }
+
+  function openLightbox(key, editCaption = false) {
+    const item = _galleryItems[key];
+    if (!item) return;
+    _lbCurrentKey = key;
+
+    document.getElementById('lb-img').src = item.url;
+
+    const captionEl = document.getElementById('lb-caption');
+    if (editCaption) {
+      captionEl.innerHTML = `<input id="lb-caption-inp" class="inp" placeholder="Agregá una descripción (opcional)" style="margin:0;font-size:0.8rem;" value="${esc(item.caption||'')}">
+        <button onclick="saveLightboxCaption('${key}')" style="margin-top:6px;background:var(--green);color:#fff;border:none;border-radius:6px;padding:5px 14px;font-size:0.78rem;cursor:pointer;">Guardar</button>`;
+    } else {
+      captionEl.textContent = item.caption || '';
+    }
+
+    const date = new Date(item.ts).toLocaleDateString('es-AR', {day:'numeric', month:'short', year:'numeric'});
+    document.getElementById('lb-meta').textContent = `${item.uploader} · ${date}`;
+
+    const delBtn = document.getElementById('lb-delete-btn');
+    const canDelete = ST.isAdmin || normalizeName(item.uploader) === normalizeName(ST.player);
+    delBtn.style.display = canDelete ? 'block' : 'none';
+
+    document.getElementById('gallery-lightbox').classList.remove('hidden');
+  }
+
+  async function saveLightboxCaption(key) {
+    const inp = document.getElementById('lb-caption-inp');
+    const caption = inp?.value?.trim() || '';
+    if (ST.fbDb) await ST.fbDb.ref(`gallery/${key}/caption`).set(caption);
+    _galleryItems[key].caption = caption;
+    document.getElementById('lb-caption').textContent = caption;
+    toast('✅ Descripción guardada');
+  }
+
+  function closeLightbox() {
+    document.getElementById('gallery-lightbox').classList.add('hidden');
+    _lbCurrentKey = null;
+  }
+
+  async function deleteGalleryPhoto() {
+    const key = _lbCurrentKey;
+    if (!key) return;
+    const item = _galleryItems[key];
+    if (!ST.isAdmin && normalizeName(item?.uploader) !== normalizeName(ST.player)) {
+      toast('Solo podés borrar tus propias fotos'); return;
+    }
+    if (!confirm('¿Eliminar esta foto?')) return;
+    if (ST.fbDb) await ST.fbDb.ref(`gallery/${key}`).remove();
+    delete _galleryItems[key];
+    closeLightbox();
+    renderGallery();
+    toast('🗑 Foto eliminada');
+  }
+
+  // ═══════════════════════════════════════════
   // INSTALL BANNER — PWA
   // ═══════════════════════════════════════════
   let _installPrompt = null;
@@ -2027,7 +2267,7 @@
   window.addEventListener('appinstalled', () => {
     hideInstallBar();
     _installPrompt = null;
-    showToast('✅ ¡App instalada! Ya la tenés en tu pantalla de inicio.', 3500);
+    toast('✅ ¡App instalada! Ya la tenés en tu pantalla de inicio.', 3500);
   });
 
   // iOS: mostrar banner de todos modos (no hay beforeinstallprompt en Safari)
