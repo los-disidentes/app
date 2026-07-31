@@ -794,11 +794,11 @@
       <!-- Nombre + Apellido -->
       <div style="display:flex; gap:8px;">
         <input class="inp" id="pname-first" placeholder="Nombre" maxlength="20"
-               autocomplete="off" style="text-transform:uppercase; margin-bottom:0; flex:1;"
+               aria-label="Nombre" autocomplete="off" style="text-transform:uppercase; margin-bottom:0; flex:1;"
                oninput="this.value=this.value.toUpperCase().replace(/[^A-ZÁÉÍÓÚÜÑ ]/gi,'')"
                onkeypress="if(event.key==='Enter') document.getElementById('pname-last').focus()">
         <input class="inp" id="pname-last" placeholder="Apellido" maxlength="30"
-               autocomplete="off" style="text-transform:uppercase; margin-bottom:0; flex:1;"
+               aria-label="Apellido" autocomplete="off" style="text-transform:uppercase; margin-bottom:0; flex:1;"
                oninput="this.value=this.value.toUpperCase().replace(/[^A-ZÁÉÍÓÚÜÑ ]/gi,'')"
                onkeypress="if(event.key==='Enter') document.getElementById('pin-0').focus()">
       </div>
@@ -806,11 +806,11 @@
 
       <!-- PIN -->
       <div class="pin-label">PIN de 4 dígitos</div>
-      <div class="pin-input">
-        <input class="pin-digit" id="pin-0" type="password" inputmode="numeric" maxlength="1" pattern="[0-9]" onkeydown="pinKey(0,event)" oninput="pinInput(0,event)">
-        <input class="pin-digit" id="pin-1" type="password" inputmode="numeric" maxlength="1" pattern="[0-9]" onkeydown="pinKey(1,event)" oninput="pinInput(1,event)">
-        <input class="pin-digit" id="pin-2" type="password" inputmode="numeric" maxlength="1" pattern="[0-9]" onkeydown="pinKey(2,event)" oninput="pinInput(2,event)">
-        <input class="pin-digit" id="pin-3" type="password" inputmode="numeric" maxlength="1" pattern="[0-9]" onkeydown="pinKey(3,event)" oninput="pinInput(3,event)">
+      <div class="pin-input" role="group" aria-label="PIN de 4 dígitos">
+        <input class="pin-digit" id="pin-0" type="password" inputmode="numeric" maxlength="1" pattern="[0-9]" aria-label="Dígito 1 del PIN" onkeydown="pinKey(0,event)" oninput="pinInput(0,event)">
+        <input class="pin-digit" id="pin-1" type="password" inputmode="numeric" maxlength="1" pattern="[0-9]" aria-label="Dígito 2 del PIN" onkeydown="pinKey(1,event)" oninput="pinInput(1,event)">
+        <input class="pin-digit" id="pin-2" type="password" inputmode="numeric" maxlength="1" pattern="[0-9]" aria-label="Dígito 3 del PIN" onkeydown="pinKey(2,event)" oninput="pinInput(2,event)">
+        <input class="pin-digit" id="pin-3" type="password" inputmode="numeric" maxlength="1" pattern="[0-9]" aria-label="Dígito 4 del PIN" onkeydown="pinKey(3,event)" oninput="pinInput(3,event)">
       </div>
       <div class="auth-error" id="auth-error"></div>
 
@@ -854,8 +854,9 @@
   // STATE
   // ═══════════════════════════════════════════
   const ST = {
-    player:       localStorage.getItem('playerName') || null,
-    playerPin:    localStorage.getItem('playerPin')  || null,
+    player:        localStorage.getItem('playerName')    || null,
+    playerPinHash: localStorage.getItem('playerPinHash') || null,
+    playerPinSalt: localStorage.getItem('playerPinSalt') || null,
     isAdmin:      false,
     activeTab:    'fixture',
     fixture:      JSON.parse(localStorage.getItem('fixture')   || '[]'),
@@ -945,6 +946,27 @@
 
   const NAME_RE = /^[A-ZÁÉÍÓÚÜÑ ]{2,}$/;
 
+  // ── PIN hashing (BUG-03) ────────────────────────────────────────────────────
+  // Usa Web Crypto PBKDF2-SHA256 (nativo en todos los navegadores modernos).
+  // Sin dependencias externas, sin bcrypt.
+  function generateSalt() {
+    return Array.from(crypto.getRandomValues(new Uint8Array(16)))
+      .map(b => b.toString(16).padStart(2,'0')).join('');
+  }
+
+  async function hashPin(pin, salt) {
+    const enc  = new TextEncoder();
+    const key  = await crypto.subtle.importKey(
+      'raw', enc.encode(pin), { name: 'PBKDF2' }, false, ['deriveBits']
+    );
+    const bits = await crypto.subtle.deriveBits(
+      { name: 'PBKDF2', salt: enc.encode(salt), iterations: 100000, hash: 'SHA-256' },
+      key, 256
+    );
+    return Array.from(new Uint8Array(bits)).map(b => b.toString(16).padStart(2,'0')).join('');
+  }
+  // ────────────────────────────────────────────────────────────────────────────
+
   async function tryLogin() {
     const firstName = normalizeName(document.getElementById('pname-first').value);
     const lastName  = normalizeName(document.getElementById('pname-last').value);
@@ -977,8 +999,29 @@
         const existing = snap.val();
 
         if (existing) {
-          // Jugador registrado → verificar PIN
-          if (existing.pin !== pin) {
+          // Jugador registrado → verificar PIN (soporta formato antiguo plain-text + nuevo hash)
+          let pinOk = false;
+          let migratedHash = null, migratedSalt = null;
+
+          if (existing.pinHash && existing.pinSalt) {
+            // BUG-03: formato nuevo — comparar hash
+            const computed = await hashPin(pin, existing.pinSalt);
+            pinOk = computed === existing.pinHash;
+          } else if (existing.pin !== undefined) {
+            // Formato antiguo — comparar plain-text y migrar si correcto
+            pinOk = existing.pin === pin;
+            if (pinOk) {
+              // Migración silenciosa: hashear y guardar, borrar pin plain
+              migratedSalt = generateSalt();
+              migratedHash = await hashPin(pin, migratedSalt);
+              ST.fbDb.ref(`players/${fbKey(name)}`).update({
+                pinHash: migratedHash, pinSalt: migratedSalt, pin: null
+              });
+              existing.pinHash = migratedHash; existing.pinSalt = migratedSalt;
+            }
+          }
+
+          if (!pinOk) {
             // BUG-04: contar intentos fallidos
             const attempts = parseInt(localStorage.getItem(attKey) || '0') + 1;
             if (attempts >= 5) {
@@ -993,30 +1036,34 @@
             btn.textContent = 'Entrar al equipo 🎾'; btn.disabled = false;
             return;
           }
-          // PIN correcto → resetear contador
+          // PIN correcto → resetear contador y actualizar lastLogin
           localStorage.removeItem(attKey); localStorage.removeItem(lockKey);
-          // PIN correcto → actualizar lastLogin
           ST.fbDb.ref(`players/${fbKey(name)}/lastLogin`).set(Date.now());
+          // Pasar el hash verificado a completeLogin
+          completeLogin(name, existing.pinHash, existing.pinSalt);
+          btn.textContent = 'Entrar al equipo 🎾'; btn.disabled = false;
+          return;
+
         } else {
           // Jugador nuevo → verificar que no exista un nombre muy similar
           const allSnap = await ST.fbDb.ref('players').once('value');
           const allPlayers = allSnap.val() || {};
           const similar = Object.values(allPlayers).find(p => {
-            // Chequear si los nombres son casi iguales (uno contiene al otro, o difieren solo en espacios)
             const a = p.name.replace(/\s+/g,'').toUpperCase();
             const b = name.replace(/\s+/g,'').toUpperCase();
             return a === b;
           });
           if (similar) {
-            // Ya existe con ese nombre normalizado → tratar como login con PIN incorrecto
             errEl.textContent = `⚠️ "${similar.name}" ya está registrado. ¿Es tu nombre? El PIN no coincide.`;
             clearPinFields(); document.getElementById('pin-0').focus();
             btn.textContent = 'Entrar al equipo 🎾'; btn.disabled = false;
             return;
           }
-          // Registrar jugador nuevo
+          // Registrar jugador nuevo — BUG-03: nunca guardar pin plain-text
+          const newSalt = generateSalt();
+          const newHash = await hashPin(pin, newSalt);
           await ST.fbDb.ref(`players/${fbKey(name)}`).set({
-            name, pin, createdAt: Date.now(), lastLogin: Date.now()
+            name, pinHash: newHash, pinSalt: newSalt, createdAt: Date.now(), lastLogin: Date.now()
           });
           // Si no hay ningún admin todavía, este jugador se convierte en admin
           const admSnap = await ST.fbDb.ref('config/admins').once('value');
@@ -1024,37 +1071,63 @@
             await ST.fbDb.ref(`config/admins/${fbKey(name)}`).set(true);
           }
           toast(`✅ ¡Registrado como ${name}!`);
+          completeLogin(name, newHash, newSalt);
+          btn.textContent = 'Entrar al equipo 🎾'; btn.disabled = false;
+          return;
         }
       } catch(e) {
-        // Firebase error: si localStorage coincide, dejar pasar; si no, denegar
-        if (ST.player !== name || ST.playerPin !== pin) {
+        // Firebase error: si hay sesión guardada con hash, verificar offline
+        if (!ST.player || !ST.playerPinHash || !ST.playerPinSalt || ST.player !== name) {
           errEl.textContent = '⚠️ Sin conexión. Reintentá cuando haya internet.';
           btn.textContent = 'Entrar al equipo 🎾'; btn.disabled = false;
           return;
         }
+        const offlineHash = await hashPin(pin, ST.playerPinSalt);
+        if (offlineHash !== ST.playerPinHash) {
+          errEl.textContent = '⚠️ Sin conexión y el PIN no coincide con la sesión guardada.';
+          btn.textContent = 'Entrar al equipo 🎾'; btn.disabled = false;
+          return;
+        }
+        // Offline OK
+        btn.textContent = 'Entrar al equipo 🎾'; btn.disabled = false;
+        completeLogin(name, ST.playerPinHash, ST.playerPinSalt);
+        return;
       }
     } else {
-      // Sin Firebase: confiar en localStorage (solo si ya tiene sesión guardada)
-      if (ST.player && ST.playerPin) {
-        if (ST.player !== name || ST.playerPin !== pin) {
+      // Sin Firebase: verificar con hash guardado en localStorage
+      if (ST.player && ST.playerPinHash && ST.playerPinSalt) {
+        if (ST.player !== name) {
           errEl.textContent = '❌ PIN incorrecto o sin conexión para registrarse.';
           btn.textContent = 'Entrar al equipo 🎾'; btn.disabled = false;
           clearPinFields();
           return;
         }
+        const offlineHash = await hashPin(pin, ST.playerPinSalt);
+        if (offlineHash !== ST.playerPinHash) {
+          errEl.textContent = '❌ PIN incorrecto.';
+          btn.textContent = 'Entrar al equipo 🎾'; btn.disabled = false;
+          clearPinFields();
+          return;
+        }
+        btn.textContent = 'Entrar al equipo 🎾'; btn.disabled = false;
+        completeLogin(name, ST.playerPinHash, ST.playerPinSalt);
+        return;
       }
-      // Primera vez sin Firebase: guardar localmente y seguir
+      // Primera vez sin Firebase: no se puede registrar
+      errEl.textContent = '⚠️ Se requiere conexión para el primer registro.';
+      btn.textContent = 'Entrar al equipo 🎾'; btn.disabled = false;
+      return;
     }
-
-    btn.textContent = 'Entrar al equipo 🎾'; btn.disabled = false;
-    completeLogin(name, pin);
   }
 
-  function completeLogin(name, pin) {
-    ST.player    = name;
-    ST.playerPin = pin;
-    localStorage.setItem('playerName', name);
-    localStorage.setItem('playerPin',  pin);
+  function completeLogin(name, pinHash, pinSalt) {
+    ST.player        = name;
+    ST.playerPinHash = pinHash;
+    ST.playerPinSalt = pinSalt;
+    localStorage.setItem('playerName',    name);
+    localStorage.setItem('playerPinHash', pinHash);
+    localStorage.setItem('playerPinSalt', pinSalt);
+    localStorage.removeItem('playerPin'); // limpiar formato viejo si quedó
     // Badge: mostrar nombre completo, pero si es muy largo solo el primer nombre
     const parts = name.split(' ');
     const badgeText = parts.length >= 2 && name.length > 16
@@ -1170,7 +1243,10 @@
   async function adminResetPin(name) {
     const newPin = prompt(`Nuevo PIN para ${name} (4 dígitos):`);
     if (!newPin || !/^\d{4}$/.test(newPin)) { toast('❌ PIN inválido — debe ser exactamente 4 dígitos'); return; }
-    await ST.fbDb.ref(`players/${fbKey(name)}/pin`).set(newPin);
+    // BUG-03: guardar hash, nunca el PIN plain
+    const salt = generateSalt();
+    const hash = await hashPin(newPin, salt);
+    await ST.fbDb.ref(`players/${fbKey(name)}`).update({ pinHash: hash, pinSalt: salt, pin: null });
     toast(`✅ PIN de ${name} actualizado`);
   }
 
@@ -1313,7 +1389,8 @@
   }
   function logout() {
     // BUG-11: limpiar toda la caché local, no solo las credenciales
-    ['playerName','playerPin','lbf','fixture','standings','lbfLocked',
+    ['playerName','playerPin','playerPinHash','playerPinSalt',
+     'lbf','fixture','standings','lbfLocked',
      'lastFetch','lastChatSeen','loginAttempts','loginLockUntil']
       .forEach(k => localStorage.removeItem(k));
     location.reload();
@@ -2516,7 +2593,7 @@
   // ═══════════════════════════════════════════
   async function init() {
     // Auto-login si hay sesión guardada
-    if (ST.player && ST.playerPin) {
+    if (ST.player && ST.playerPinHash) {
       const _parts = ST.player.split(' ');
       const _badge = _parts.length >= 2 && ST.player.length > 16
         ? _parts[0] + ' ' + _parts[_parts.length-1].charAt(0) + '.'
@@ -2554,6 +2631,15 @@
       }
     });
   }
+
+  // Error handler global — captura promesas no manejadas para debugging
+  window.addEventListener('unhandledrejection', e => {
+    console.error('[Disidentes] Unhandled rejection:', e.reason);
+    // No molesta al usuario con toasts por errores de red/Firebase silenciosos
+  });
+  window.addEventListener('error', e => {
+    console.error('[Disidentes] Error global:', e.message, e.filename, e.lineno);
+  });
 
   document.addEventListener('DOMContentLoaded', init);
 
