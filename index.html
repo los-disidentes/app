@@ -1771,7 +1771,14 @@
   function watchAttendance(matchId) {
     if (!ST.fbDb) return;
     ST.fbDb.ref(`attendance/${matchId}`).on('value', s => {
-      ST.attendance = s.val() || {};
+      const raw = s.val();
+      // Reconstruir indexado por nombre (usando campo player) para que el render funcione
+      if (raw) {
+        ST.attendance = {};
+        Object.values(raw).forEach(v => { if (v && v.player) ST.attendance[v.player] = v; });
+      } else {
+        ST.attendance = {};
+      }
       if (ST.activeTab === 'asistencia') renderAtt();
       if (ST.activeTab === 'parejas')    renderParejas();
       updateAttBadge();
@@ -2140,8 +2147,16 @@
     if(!nm||isLocked(nm)){toast('🔒 La asistencia está cerrada');return;}
     if(!ST.player){toast('Iniciá sesión para confirmar');return;}
     const data={status,ts:Date.now(),player:ST.player};
-    if(ST.fbDb) await ST.fbDb.ref(`attendance/${nm.id}/${fbKey(ST.player)}`).set(data);
-    else{ST.attendance[ST.player]=data;renderAtt();}
+    if(ST.fbOK) {
+      await ST.fbDb.ref(`attendance/${nm.id}/${fbKey(ST.player)}`).set(data);
+    } else {
+      // REST fallback — PUT directo sin WebSocket
+      await fetch(`${CFG.fbDefaultUrl}/attendance/${encodeURIComponent(nm.id)}/${fbKey(ST.player)}.json`, {
+        method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data)
+      });
+      ST.attendance[ST.player] = data; // local update para UI inmediata
+      renderAtt();
+    }
     toast(status==='confirmed'?'✅ ¡Confirmado! Jugamos juntos 🎾':'📝 Registrado. ¡La próxima!');
     updateAttBadge();
   }
@@ -2319,8 +2334,25 @@
     inp.value = '';
     const msg = { player: ST.player, text, ts: Date.now() };
     try {
-      if (ST.fbDb) await ST.fbDb.ref('chat').push(msg);
-      else { ST.chat.push({id: String(Date.now()), ...msg}); renderChat(); }
+      if (ST.fbOK) {
+        // WebSocket activo — push en tiempo real
+        await ST.fbDb.ref('chat').push(msg);
+      } else {
+        // REST fallback — POST genera push-key automática igual que WebSocket
+        const r = await fetch(`${CFG.fbDefaultUrl}/chat.json`, {
+          method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(msg)
+        });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const {name: id} = await r.json();
+        ST.chat.push({id, ...msg});
+        renderChat();
+        const m = document.getElementById('chat-msgs');
+        if (m) setTimeout(() => { m.scrollTop = m.scrollHeight; }, 50);
+      }
+    } catch(e) {
+      toast('⚠️ Error al enviar. Chequeá tu conexión.');
+      inp.value = text; // restaurar texto para que el usuario pueda reintentar
+      console.error('sendMsg error:', e);
     } finally {
       if (btn) { btn.disabled = false; }
     }
@@ -2907,7 +2939,17 @@
   }
   // ──────────────────────────────────────────────────────────────
 
-  function saveLBF(){localStorage.setItem('lbf',JSON.stringify(ST.lbf));if(ST.fbDb)ST.fbDb.ref('lbf').set(ST.lbf);}
+  function saveLBF(){
+    localStorage.setItem('lbf', JSON.stringify(ST.lbf));
+    if (ST.fbOK) {
+      ST.fbDb.ref('lbf').set(ST.lbf);
+    } else {
+      // REST fallback — PUT sin WebSocket
+      fetch(`${CFG.fbDefaultUrl}/lbf.json`, {
+        method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(ST.lbf)
+      }).catch(e => console.warn('saveLBF REST failed:', e));
+    }
+  }
 
   function updateLBFDatalist(){
     const dl=document.getElementById('lbf-names-list');
