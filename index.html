@@ -1518,10 +1518,6 @@
       // Las reglas de Firebase tienen .write: true (con superAdmins protegido),
       // así que no se necesita auth para lecturas ni escrituras normales.
       _initFirebaseDb();
-        }
-        // Una vez que Firebase tiene usuario, refresca listeners sensibles
-        // (los writes necesitan auth != null; el SDK los reintenta automáticamente)
-      });
     } catch(e) {
       console.error('Firebase init error:', e);
       setStatus(false, 'Error al conectar Firebase');
@@ -1627,7 +1623,7 @@
     if (path.includes('tabla_posiciones'))         return '/app/standings.json';
     if (path.includes('resultadopartidotenis_visita')) {
       const m = path.match(/NroPartidoCampeonato=(\d+)/);
-      if (m) return '/app/results/' + m[1] + '.json';
+      if (m) return `/app/results/${m[1]}.json`;
     }
     return null;
   }
