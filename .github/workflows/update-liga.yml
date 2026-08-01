@@ -3,7 +3,7 @@ name: Actualizar datos de la liga
 on:
   schedule:
     - cron: '0 */2 * * *'   # cada 2 horas
-  workflow_dispatch:          # también desde la pestaña Actions manualmente
+  workflow_dispatch:
 
 jobs:
   update:
@@ -14,73 +14,82 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Fetch fixture
+      - name: Fetch all liga data
         run: |
-          curl -sfL \
-            -H "User-Agent: Mozilla/5.0 (X11; Linux x86_64) Chrome/120" \
-            -H "Accept: application/json, */*" \
-            -H "Referer: https://www.ligacountrysur.com.ar/" \
-            "https://www.ligacountrysur.com.ar/api/fixture_mod.php?NroCampeonato=$CAMP_ID" \
-            -o fixture.json \
-            || echo 'null' > fixture.json
-        env:
-          CAMP_ID: 2155
+          python3 << 'PYEOF'
+          import urllib.request, urllib.parse, json, sys, os
 
-      - name: Fetch standings
-        run: |
-          curl -sfL \
-            -H "User-Agent: Mozilla/5.0 (X11; Linux x86_64) Chrome/120" \
-            -H "Accept: application/json, */*" \
-            -H "Referer: https://www.ligacountrysur.com.ar/" \
-            "https://www.ligacountrysur.com.ar/api/tabla_posiciones.php?NroCampeonato=$CAMP_ID" \
-            -o standings.json \
-            || echo 'null' > standings.json
-        env:
-          CAMP_ID: 2155
+          CAMP_ID = '2155'
+          BASE    = 'https://www.ligacountrysur.com.ar'
+          HEADERS = {
+            'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120',
+            'Accept':     'application/json, */*',
+            'Referer':    BASE + '/',
+          }
 
-      - name: Fetch resultados de partidos
-        run: |
-          mkdir -p results
-          # Parsear los IDs de partidos propios del fixture
-          python3 << 'EOF'
-          import json, subprocess, sys
+          def fetch_direct(url):
+            req = urllib.request.Request(url, headers=HEADERS)
+            with urllib.request.urlopen(req, timeout=12) as r:
+              return json.loads(r.read())
 
+          def fetch_via_proxy(url):
+            proxy = 'https://api.allorigins.win/get?url=' + urllib.parse.quote(url)
+            req = urllib.request.Request(proxy, headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req, timeout=18) as r:
+              result = json.loads(r.read())
+              raw = result.get('contents', '')
+              return json.loads(raw)
+
+          def fetch_url(url):
+            for name, fn in [('direct', fetch_direct), ('allorigins', fetch_via_proxy)]:
+              try:
+                data = fn(url)
+                if data is not None:
+                  print(f'  OK via {name}')
+                  return data
+              except Exception as e:
+                print(f'  {name} failed: {e}')
+            return None
+
+          # --- fixture ---
+          print('Fetching fixture...')
+          url = f'{BASE}/api/fixture_mod.php?NroCampeonato={CAMP_ID}'
+          data = fetch_url(url)
+          with open('fixture.json', 'w') as f:
+            json.dump(data, f) if data is not None else f.write('null')
+
+          # --- standings ---
+          print('Fetching standings...')
+          url = f'{BASE}/api/tabla_posiciones.php?NroCampeonato={CAMP_ID}'
+          data = fetch_url(url)
+          with open('standings.json', 'w') as f:
+            json.dump(data, f) if data is not None else f.write('null')
+
+          # --- match results ---
+          os.makedirs('results', exist_ok=True)
           try:
             with open('fixture.json') as f:
-              data = json.load(f)
+              fixture = json.load(f)
           except Exception:
-            sys.exit(0)
+            fixture = None
 
-          if not data:
-            sys.exit(0)
-
-          team_kw = ['disidentes', 'miralagos los']
-
-          for fecha in data:
-            for p in fecha.get('partidos', []):
-              local  = (p.get('Local')     or '').lower()
-              visit  = (p.get('Visitante') or '').lower()
-              is_our = any(k in local or k in visit for k in team_kw)
-              if not is_our:
-                continue
-              nid = p.get('NroPartidoCampeonato')
-              if not nid:
-                continue
-              url = f"https://www.ligacountrysur.com.ar/resultadopartidotenis_visita.php?NroPartidoCampeonato={nid}"
-              result = subprocess.run(
-                [
-                  'curl', '-sfL',
-                  '-H', 'User-Agent: Mozilla/5.0 (X11; Linux x86_64) Chrome/120',
-                  '-H', 'Accept: application/json, */*',
-                  '-H', 'Referer: https://www.ligacountrysur.com.ar/',
-                  '-o', f'results/{nid}.json',
-                  url,
-                ],
-                capture_output=True, text=True
-              )
-              status = 'OK' if result.returncode == 0 else f'ERROR {result.returncode}'
-              print(f"Partido {nid}: {status}")
-          EOF
+          if fixture:
+            kw = ['disidentes', 'miralagos los']
+            for fecha in fixture:
+              for p in fecha.get('partidos', []):
+                local = (p.get('Local') or '').lower()
+                visit = (p.get('Visitante') or '').lower()
+                if not any(k in local or k in visit for k in kw):
+                  continue
+                nid = p.get('NroPartidoCampeonato')
+                if not nid:
+                  continue
+                print(f'Fetching result {nid}...')
+                url = f'{BASE}/resultadopartidotenis_visita.php?NroPartidoCampeonato={nid}'
+                rdata = fetch_url(url)
+                with open(f'results/{nid}.json', 'w') as f:
+                  json.dump(rdata, f) if rdata is not None else f.write('null')
+          PYEOF
 
       - name: Commit si hay cambios
         run: |
