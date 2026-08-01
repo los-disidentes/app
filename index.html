@@ -1020,7 +1020,7 @@
 
     if (ST.fbDb) {
       try {
-        const _timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 8000));
+        const _timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 4000));
         const snap = await Promise.race([
           ST.fbDb.ref(`players/${fbKey(name)}`).once('value'),
           _timeout,
@@ -1105,7 +1105,57 @@
           return;
         }
       } catch(e) {
-        // Firebase error: si hay sesión guardada con hash, verificar offline
+        // WebSocket falló (timeout o error de red) — intentar REST API como fallback
+        // La REST API usa HTTPS puro (sin WebSocket), funciona aunque wss:// esté bloqueado
+        try {
+          const DB_REST = 'https://los-disidentes-app-default-rtdb.firebaseio.com';
+          const restResp = await fetch(`${DB_REST}/players/${fbKey(name)}.json`);
+          if (restResp.ok) {
+            const existing = await restResp.json();
+            if (existing) {
+              // Mismo flow de verificación de PIN que el path normal
+              let pinOk = false;
+              if (existing.pinHash && existing.pinSalt) {
+                pinOk = (await hashPin(pin, existing.pinSalt)) === existing.pinHash;
+              } else if (existing.pin !== undefined) {
+                pinOk = existing.pin === pin;
+                if (pinOk) {
+                  // Migración silenciosa a hash
+                  const mSalt = generateSalt();
+                  const mHash = await hashPin(pin, mSalt);
+                  if (ST.fbDb) ST.fbDb.ref(`players/${fbKey(name)}`).update({ pinHash: mHash, pinSalt: mSalt, pin: null });
+                  existing.pinHash = mHash; existing.pinSalt = mSalt;
+                }
+              }
+              if (!pinOk) {
+                const attempts = parseInt(localStorage.getItem(attKey) || '0') + 1;
+                if (attempts >= 5) {
+                  localStorage.setItem(lockKey, Date.now() + 5 * 60 * 1000);
+                  localStorage.setItem(attKey, '0');
+                  errEl.textContent = '🔒 5 intentos fallidos. Bloqueado 5 minutos.';
+                } else {
+                  localStorage.setItem(attKey, attempts);
+                  errEl.textContent = `❌ PIN incorrecto. Intentos restantes: ${5 - attempts}`;
+                }
+                clearPinFields(); document.getElementById('pin-0').focus();
+                btn.textContent = 'Entrar al equipo 🎾'; btn.disabled = false;
+                return;
+              }
+              // PIN correcto via REST — login OK
+              localStorage.removeItem(attKey); localStorage.removeItem(lockKey);
+              completeLogin(name, existing.pinHash, existing.pinSalt);
+              btn.textContent = 'Entrar al equipo 🎾'; btn.disabled = false;
+              return;
+            } else {
+              // Usuario no existe — no se puede registrar sin WebSocket
+              errEl.textContent = '⚠️ Sin conexión estable. Reintentá en unos segundos.';
+              btn.textContent = 'Entrar al equipo 🎾'; btn.disabled = false;
+              return;
+            }
+          }
+        } catch(_restErr) { /* REST también falló → continuar con offline */ }
+
+        // Último recurso: offline con hash guardado en localStorage
         if (!ST.player || !ST.playerPinHash || !ST.playerPinSalt || ST.player !== name) {
           errEl.textContent = '⚠️ Sin conexión. Reintentá cuando haya internet.';
           btn.textContent = 'Entrar al equipo 🎾'; btn.disabled = false;
