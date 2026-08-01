@@ -1,5 +1,5 @@
-// Service Worker — Los Disidentes App v33
-const CACHE = 'disidentes-v33';
+// Service Worker — Los Disidentes App v34
+const CACHE = 'disidentes-v34';
 const PRECACHE = [
   '/app/',
   '/app/index.html',
@@ -17,7 +17,7 @@ self.addEventListener('install', e => {
   );
 });
 
-// Activar: limpiar caches viejos
+// Activar: limpiar caches viejos y forzar recarga en todos los clientes
 self.addEventListener('activate', e => {
   e.waitUntil(
     caches.keys()
@@ -25,6 +25,12 @@ self.addEventListener('activate', e => {
         keys.filter(k => k !== CACHE).map(k => caches.delete(k))
       ))
       .then(() => self.clients.claim())
+      .then(() => self.clients.matchAll({ type: 'window' }))
+      .then(clients => {
+        // Decirle a cada pestaña abierta que hay una nueva versión
+        // El controllerchange en el cliente ya recarga automáticamente
+        clients.forEach(c => c.postMessage({ type: 'SW_UPDATED', version: '34' }));
+      })
   );
 });
 
