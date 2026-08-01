@@ -16,7 +16,7 @@ jobs:
 
       - name: Fetch fixture
         run: |
-          curl -sf \
+          curl -sfL \
             -H "User-Agent: Mozilla/5.0 (X11; Linux x86_64) Chrome/120" \
             -H "Accept: application/json, */*" \
             -H "Referer: https://www.ligacountrysur.com.ar/" \
@@ -28,7 +28,7 @@ jobs:
 
       - name: Fetch standings
         run: |
-          curl -sf \
+          curl -sfL \
             -H "User-Agent: Mozilla/5.0 (X11; Linux x86_64) Chrome/120" \
             -H "Accept: application/json, */*" \
             -H "Referer: https://www.ligacountrysur.com.ar/" \
@@ -69,7 +69,7 @@ jobs:
               url = f"https://www.ligacountrysur.com.ar/resultadopartidotenis_visita.php?NroPartidoCampeonato={nid}"
               result = subprocess.run(
                 [
-                  'curl', '-sf',
+                  'curl', '-sfL',
                   '-H', 'User-Agent: Mozilla/5.0 (X11; Linux x86_64) Chrome/120',
                   '-H', 'Accept: application/json, */*',
                   '-H', 'Referer: https://www.ligacountrysur.com.ar/',
