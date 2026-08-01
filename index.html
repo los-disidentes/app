@@ -1439,19 +1439,16 @@
 
     let players = {}, admins = {};
     try {
-      const _to = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 4000));
-      const [playersSnap, adminsSnap] = await Promise.race([
-        Promise.all([
+      if (ST.fbOK) {
+        // WebSocket disponible — leer directamente
+        const [playersSnap, adminsSnap] = await Promise.all([
           ST.fbDb.ref('players').once('value'),
           ST.fbDb.ref('config/admins').once('value'),
-        ]),
-        _to,
-      ]);
-      players = playersSnap.val() || {};
-      admins  = adminsSnap.val()  || {};
-    } catch(_) {
-      // WebSocket no disponible — cargar via REST
-      try {
+        ]);
+        players = playersSnap.val() || {};
+        admins  = adminsSnap.val()  || {};
+      } else {
+        // Sin WebSocket — ir directo a REST sin esperar
         const BASE = CFG.fbDefaultUrl;
         const [rp, ra] = await Promise.all([
           fetch(`${BASE}/players.json`).then(r => r.json()),
@@ -1459,10 +1456,10 @@
         ]);
         players = rp || {};
         admins  = ra || {};
-      } catch(e2) {
-        wrap.innerHTML = '<div class="txs tmuted tcenter">Sin conexión — no se pudo cargar la lista.</div>';
-        return;
       }
+    } catch(e) {
+      wrap.innerHTML = '<div class="txs tmuted tcenter">Sin conexión — no se pudo cargar la lista.</div>';
+      return;
     }
     const entries = Object.entries(players).sort((a,b) => a[1].name.localeCompare(b[1].name));
 
@@ -1508,48 +1505,103 @@
       if (action === 'makeadmin')    adminToggleAdmin(pname, pkey, true);
       if (action === 'removeadmin')  adminToggleAdmin(pname, pkey, false);
       if (action === 'removeplayer') adminRemovePlayer(pname, pkey);
-    }, { once: true });
+    });  // sin { once: true } — el listener persiste hasta que se re-renderice el panel
   }
 
   async function adminToggleAdmin(name, key, makeAdmin) {
     if (!ST.isSuperAdmin) { toast('⚠️ Solo el admin supremo puede gestionar permisos'); return; }
-    if (makeAdmin) {
-      if (!confirm(`¿Dar permisos de admin a ${name}?`)) return;
-      await ST.fbDb.ref(`config/admins/${key}`).set(true);
-      toast(`👑 ${name} es ahora admin`);
-    } else {
-      if (name === ST.player) { toast('⚠️ No podés quitarte admin a vos mismo'); return; }
-      if (!confirm(`¿Quitar permisos de admin a ${name}?`)) return;
-      await ST.fbDb.ref(`config/admins/${key}`).remove();
-      toast(`✅ ${name} ya no es admin`);
+    try {
+      if (makeAdmin) {
+        if (!confirm(`¿Dar permisos de admin a ${name}?`)) return;
+        if (ST.fbOK) {
+          await ST.fbDb.ref(`config/admins/${key}`).set(true);
+        } else {
+          const r = await fetch(`${CFG.fbDefaultUrl}/config/admins/${key}.json`, {
+            method: 'PUT', headers: {'Content-Type': 'application/json'}, body: 'true'
+          });
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        }
+        toast(`👑 ${name} es ahora admin`);
+      } else {
+        if (name === ST.player) { toast('⚠️ No podés quitarte admin a vos mismo'); return; }
+        if (!confirm(`¿Quitar permisos de admin a ${name}?`)) return;
+        if (ST.fbOK) {
+          await ST.fbDb.ref(`config/admins/${key}`).remove();
+        } else {
+          const r = await fetch(`${CFG.fbDefaultUrl}/config/admins/${key}.json`, { method: 'DELETE' });
+          if (!r.ok && r.status !== 404) throw new Error(`HTTP ${r.status}`);
+        }
+        toast(`✅ ${name} ya no es admin`);
+      }
+      renderAdmin();
+    } catch(e) {
+      console.error('adminToggleAdmin error:', e);
+      toast('⚠️ Error al cambiar permisos. Intentá de nuevo.');
     }
-    renderAdmin();
   }
 
   async function adminResetPin(name) {
     const newPin = prompt(`Nuevo PIN para ${name} (4 dígitos):`);
     if (!newPin || !/^\d{4}$/.test(newPin)) { toast('❌ PIN inválido — debe ser exactamente 4 dígitos'); return; }
-    // BUG-03: guardar hash, nunca el PIN plain
-    const salt = generateSalt();
-    const hash = await hashPin(newPin, salt);
-    await ST.fbDb.ref(`players/${fbKey(name)}`).update({ pinHash: hash, pinSalt: salt, pin: null });
-    toast(`✅ PIN de ${name} actualizado`);
+    try {
+      const salt = generateSalt();
+      const hash = await hashPin(newPin, salt);
+      const key  = fbKey(name);
+      if (ST.fbOK) {
+        await ST.fbDb.ref(`players/${key}`).update({ pinHash: hash, pinSalt: salt, pin: null });
+      } else {
+        const r = await fetch(`${CFG.fbDefaultUrl}/players/${key}.json`, {
+          method: 'PATCH', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ pinHash: hash, pinSalt: salt, pin: null })
+        });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      }
+      toast(`✅ PIN de ${name} actualizado`);
+    } catch(e) {
+      console.error('adminResetPin error:', e);
+      toast('⚠️ Error al actualizar PIN. Intentá de nuevo.');
+    }
   }
 
   async function adminRemovePlayer(name, key) {
     if (!confirm(`¿Eliminar el registro de ${name}?\nPodrán volver a registrarse con un nuevo PIN.`)) return;
-    await ST.fbDb.ref(`players/${key}`).remove();
-    await ST.fbDb.ref(`config/admins/${key}`).remove();
-    toast(`✅ Registro de ${name} eliminado`);
-    renderAdmin();
+    try {
+      if (ST.fbOK) {
+        await ST.fbDb.ref(`players/${key}`).remove();
+        await ST.fbDb.ref(`config/admins/${key}`).remove();
+      } else {
+        const BASE = CFG.fbDefaultUrl;
+        const [r1, r2] = await Promise.all([
+          fetch(`${BASE}/players/${key}.json`, { method: 'DELETE' }),
+          fetch(`${BASE}/config/admins/${key}.json`, { method: 'DELETE' }),
+        ]);
+        if (!r1.ok && r1.status !== 404) throw new Error(`HTTP ${r1.status}`);
+      }
+      toast(`✅ Registro de ${name} eliminado`);
+      renderAdmin();
+    } catch(e) {
+      console.error('adminRemovePlayer error:', e);
+      toast('⚠️ Error al eliminar. Intentá de nuevo.');
+    }
   }
 
-
   async function deleteMessage(msgId) {
-    if (!ST.isAdmin || !ST.fbDb) return;
+    if (!ST.isAdmin) return;
     if (!confirm('¿Eliminar este mensaje?')) return;
-    await ST.fbDb.ref(`chat/${msgId}`).remove();
-    toast('🗑 Mensaje eliminado');
+    try {
+      if (ST.fbOK && ST.fbDb) {
+        await ST.fbDb.ref(`chat/${msgId}`).remove();
+      } else {
+        const r = await fetch(`${CFG.fbDefaultUrl}/chat/${msgId}.json`, { method: 'DELETE' });
+        if (!r.ok && r.status !== 404) throw new Error(`HTTP ${r.status}`);
+      }
+      ST.chat = ST.chat.filter(m => m.id !== msgId);
+      renderChat();
+      toast('🗑 Mensaje eliminado');
+    } catch(e) {
+      console.error('deleteMessage error:', e);
+      toast('⚠️ Error al eliminar mensaje.');
+    }
   }
 
   // ═══════════════════════════════════════════
