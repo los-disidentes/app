@@ -1,5 +1,5 @@
-// Service Worker — Los Disidentes App v27
-const CACHE = 'disidentes-v27';
+// Service Worker — Los Disidentes App v28
+const CACHE = 'disidentes-v28';
 const PRECACHE = [
   '/app/',
   '/app/index.html',
@@ -63,6 +63,19 @@ self.addEventListener('fetch', e => {
             return resp;
           })
           .catch(() => cached || caches.match('/app/index.html'));
+      }
+      // Para archivos de liga (actualizados por GitHub Actions): network-first
+      if (url.pathname.startsWith('/app/fixture.json') ||
+          url.pathname.startsWith('/app/standings.json') ||
+          url.pathname.startsWith('/app/results/')) {
+        return fetch(e.request)
+          .then(resp => {
+            if (resp.ok) caches.open(CACHE).then(c => c.put(e.request, resp.clone()));
+            return resp;
+          })
+          .catch(() => cached || new Response('null', {
+            headers: { 'Content-Type': 'application/json' }
+          }));
       }
       // Para el resto: cache-first
       return cached || fetch(e.request).then(resp => {
