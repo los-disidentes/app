@@ -21,8 +21,8 @@ jobs:
             -H "Accept: application/json, */*" \
             -H "Referer: https://www.ligacountrysur.com.ar/" \
             "https://www.ligacountrysur.com.ar/api/fixture_mod.php?NroCampeonato=$CAMP_ID" \
-            -o app/fixture.json \
-            || echo 'null' > app/fixture.json
+            -o fixture.json \
+            || echo 'null' > fixture.json
         env:
           CAMP_ID: 2155
 
@@ -33,20 +33,20 @@ jobs:
             -H "Accept: application/json, */*" \
             -H "Referer: https://www.ligacountrysur.com.ar/" \
             "https://www.ligacountrysur.com.ar/api/tabla_posiciones.php?NroCampeonato=$CAMP_ID" \
-            -o app/standings.json \
-            || echo 'null' > app/standings.json
+            -o standings.json \
+            || echo 'null' > standings.json
         env:
           CAMP_ID: 2155
 
       - name: Fetch resultados de partidos
         run: |
-          mkdir -p app/results
+          mkdir -p results
           # Parsear los IDs de partidos propios del fixture
           python3 << 'EOF'
           import json, subprocess, sys
 
           try:
-            with open('app/fixture.json') as f:
+            with open('fixture.json') as f:
               data = json.load(f)
           except Exception:
             sys.exit(0)
@@ -73,7 +73,7 @@ jobs:
                   '-H', 'User-Agent: Mozilla/5.0 (X11; Linux x86_64) Chrome/120',
                   '-H', 'Accept: application/json, */*',
                   '-H', 'Referer: https://www.ligacountrysur.com.ar/',
-                  '-o', f'app/results/{nid}.json',
+                  '-o', f'results/{nid}.json',
                   url,
                 ],
                 capture_output=True, text=True
@@ -86,7 +86,7 @@ jobs:
         run: |
           git config user.email "bot@los-disidentes.github.io"
           git config user.name "Liga Data Bot"
-          git add app/fixture.json app/standings.json app/results/ 2>/dev/null || true
+          git add fixture.json standings.json results/ 2>/dev/null || true
           git diff --staged --quiet \
             || git commit -m "Liga data $(date -u +'%Y-%m-%d %H:%M') UTC"
           git push || true
