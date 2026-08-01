@@ -1180,23 +1180,31 @@
   }
 
   function checkAdmin() {
+    // Bootstrap inmediato: si es el admin principal, aplicar UI sin esperar Firebase
+    if (isBootstrapAdmin()) {
+      ST.isAdmin    = true;
+      ST.isSuperAdmin = true;
+      applyAdminUI();
+    }
     if (!ST.fbDb || !ST.player) return;
-    // Leer admin y superAdmin en paralelo
+    // Verificar en Firebase (puede cambiar el estado si fue removido)
     Promise.all([
       ST.fbDb.ref(`config/admins/${fbKey(ST.player)}`).once('value'),
       ST.fbDb.ref(`config/superAdmins/${fbKey(ST.player)}`).once('value'),
     ]).then(([admSnap, superSnap]) => {
       const isSA = !!superSnap.val();
       ST.isSuperAdmin = isSA;
-      // Bootstrap por nombre: el superAdmin siempre es admin
       ST.isAdmin = !!admSnap.val() || isSA ||
         normalizeName(ST.player) === normalizeName(CFG.bootstrapAdmin);
       applyAdminUI();
     }).catch(e => {
       console.warn('checkAdmin error:', e);
-      ST.isAdmin = normalizeName(ST.player) === normalizeName(CFG.bootstrapAdmin);
-      ST.isSuperAdmin = ST.isAdmin;
-      applyAdminUI();
+      // En error de red, mantener lo ya seteado (bootstrap si aplica)
+      if (!isBootstrapAdmin()) {
+        ST.isAdmin = false;
+        ST.isSuperAdmin = false;
+        applyAdminUI();
+      }
     });
   }
 
@@ -1456,18 +1464,18 @@
           appId:             '1:658281523905:web:d46d80c740dd2b86d20240',
         });
       }
-      // BUG-01: autenticar anónimamente antes de abrir listeners de DB
-      // Esto permite reglas Firebase con auth != null sin cambiar la UX
+      // Iniciar DB inmediatamente — no esperar auth
+      // Las reglas de Firebase tienen .read: true, por lo que las lecturas
+      // funcionan sin auth. Auth se lanza en paralelo para las escrituras.
+      _initFirebaseDb();
       firebase.auth().onAuthStateChanged(user => {
         if (!user) {
           firebase.auth().signInAnonymously().catch(err => {
             console.warn('Firebase anonymous auth failed:', err.code);
-            // Si falla (auth no habilitado aún), igual continuar con DB abierta
-            _initFirebaseDb();
           });
-        } else {
-          _initFirebaseDb();
         }
+        // Una vez que Firebase tiene usuario, refresca listeners sensibles
+        // (los writes necesitan auth != null; el SDK los reintenta automáticamente)
       });
     } catch(e) {
       console.error('Firebase init error:', e);
@@ -1476,6 +1484,7 @@
   }
 
   function _initFirebaseDb() {
+    if (ST.fbDb) return; // Guard — evitar doble inicialización
     try {
       ST.fbDb = firebase.database();
       ST.fbDb.ref('.info/connected').on('value', s => {
