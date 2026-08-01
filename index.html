@@ -881,7 +881,8 @@
     player:        localStorage.getItem('playerName')    || null,
     playerPinHash: localStorage.getItem('playerPinHash') || null,
     playerPinSalt: localStorage.getItem('playerPinSalt') || null,
-    isAdmin:      false,
+    isAdmin:       false,
+    isSuperAdmin:  false,
     activeTab:    'fixture',
     fixture:      JSON.parse(localStorage.getItem('fixture')   || '[]'),
     standings:    JSON.parse(localStorage.getItem('standings') || '[]'),
@@ -1175,19 +1176,19 @@
   }
 
   function checkAdmin() {
-    // Bootstrap: comparación exacta con el nombre completo del admin principal
-    if (normalizeName(ST.player || '') === normalizeName(CFG.bootstrapAdmin)) {
-      ST.isAdmin = true;
+    if (!ST.fbDb || !ST.player) return;
+    // Leer admin y superAdmin en paralelo
+    Promise.all([
+      ST.fbDb.ref(`config/admins/${fbKey(ST.player)}`).once('value'),
+      ST.fbDb.ref(`config/superAdmins/${fbKey(ST.player)}`).once('value'),
+    ]).then(([admSnap, superSnap]) => {
+      const isSA = !!superSnap.val();
+      ST.isSuperAdmin = isSA;
+      // Bootstrap por nombre: el superAdmin siempre es admin
+      ST.isAdmin = !!admSnap.val() || isSA ||
+        normalizeName(ST.player) === normalizeName(CFG.bootstrapAdmin);
       applyAdminUI();
-      return;
-    }
-    // Verificar en Firebase
-    if (ST.fbDb && ST.player) {
-      ST.fbDb.ref(`config/admins/${fbKey(ST.player)}`).once('value').then(s => {
-        ST.isAdmin = !!s.val();
-        applyAdminUI();
-      });
-    }
+    });
   }
 
   function applyAdminUI() {
@@ -1239,9 +1240,11 @@
           </div>
           <div class="padmin-actions">
             <button class="padmin-btn" data-pname="${esc(p.name)}" data-action="resetpin" title="Resetear PIN">🔑 PIN</button>
-            ${!isAdm
-              ? `<button class="padmin-btn" data-pname="${esc(p.name)}" data-pkey="${key}" data-action="makeadmin" title="Dar admin">👑</button>`
-              : `<button class="padmin-btn" data-pname="${esc(p.name)}" data-pkey="${key}" data-action="removeadmin" title="Quitar admin">−👑</button>`}
+            ${ST.isSuperAdmin
+              ? (!isAdm
+                  ? `<button class="padmin-btn" data-pname="${esc(p.name)}" data-pkey="${key}" data-action="makeadmin" title="Dar admin">👑</button>`
+                  : `<button class="padmin-btn" data-pname="${esc(p.name)}" data-pkey="${key}" data-action="removeadmin" title="Quitar admin">−👑</button>`)
+              : ''}
             <button class="padmin-btn del" data-pname="${esc(p.name)}" data-pkey="${key}" data-action="removeplayer" title="Eliminar registro">🗑</button>
           </div>
         </div>`;
@@ -1265,6 +1268,7 @@
   }
 
   async function adminToggleAdmin(name, key, makeAdmin) {
+    if (!ST.isSuperAdmin) { toast('⚠️ Solo el admin supremo puede gestionar permisos'); return; }
     if (makeAdmin) {
       if (!confirm(`¿Dar permisos de admin a ${name}?`)) return;
       await ST.fbDb.ref(`config/admins/${key}`).set(true);
