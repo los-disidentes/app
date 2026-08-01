@@ -1249,8 +1249,8 @@
   // ═══════════════════════════════════════════
   // REST FALLBACK — datos sin WebSocket
   // ═══════════════════════════════════════════
-  async function _loadAllDataViaREST() {
-    if (ST._restLoaded) return;
+  async function _loadAllDataViaREST(force = false) {
+    if (!force && ST._restLoaded) return;
     ST._restLoaded = true;
     const BASE = CFG.fbDefaultUrl;
 
@@ -1259,7 +1259,7 @@
       const r = await fetch(`${BASE}/lbf.json`);
       if (r.ok) {
         const data = await r.json();
-        if (data && Array.isArray(data) && !ST.lbf?.length) {
+        if (data && Array.isArray(data)) {
           ST.lbf = data;
           localStorage.setItem('lbf', JSON.stringify(data));
           updateLBFDatalist();
@@ -1270,7 +1270,7 @@
       }
     } catch(_) {}
 
-    // Config (lbfLocked ya cubierto en checkAdmin; presencia no disponible sin WS)
+    // Config / lbfLocked
     try {
       const r = await fetch(`${BASE}/config/lbfLocked.json`);
       if (r.ok) {
@@ -1288,14 +1288,49 @@
       const r = await fetch(`${BASE}/chat.json?orderBy=%22ts%22&limitToLast=120`);
       if (r.ok) {
         const data = await r.json();
-        if (data && !ST.chat?.length) {
+        if (data) {
           ST.chat = Object.entries(data)
             .map(([id, m]) => ({ id, ...m }))
             .sort((a, b) => a.ts - b.ts);
+          const last = ST.chat[ST.chat.length - 1];
+          if (last && last.ts > ST.lastChatSeen && last.player !== ST.player) {
+            ST.unreadChat++;
+            if (ST.activeTab !== 'chat') {
+              const b = document.getElementById('badge-chat');
+              if (b) { b.textContent = ST.unreadChat; b.classList.remove('hidden'); }
+            }
+          }
           if (ST.activeTab === 'chat') renderChat();
         }
       }
     } catch(_) {}
+
+    // Galería
+    try {
+      const r = await fetch(`${BASE}/gallery.json`);
+      if (r.ok) {
+        const data = await r.json();
+        if (data) {
+          _galleryItems = data;
+          if (ST.activeTab === 'galeria') renderGallery();
+        }
+      }
+    } catch(_) {}
+
+    // Asistencia — próximo partido
+    const nm = nextMatch ? nextMatch() : null;
+    if (nm) {
+      try {
+        const r = await fetch(`${BASE}/attendance/${encodeURIComponent(nm.id)}.json`);
+        if (r.ok) {
+          const data = await r.json();
+          ST.attendance = data || {};
+          if (ST.activeTab === 'asistencia') renderAtt();
+          if (ST.activeTab === 'parejas')    renderParejas();
+          updateAttBadge();
+        }
+      } catch(_) {}
+    }
   }
 
   // ═══════════════════════════════════════════
@@ -2905,6 +2940,17 @@
     // Verificar admin si ya tenemos sesión y Firebase
     if (ST.player && ST.fbDb) checkAdmin();
 
+    // ── REST FALLBACK PARA AUTO-LOGIN EN REDES MÓVILES ──────────────────────
+    // completeLogin() llama _loadAllDataViaREST() sólo en login manual.
+    // Usuarios con sesión guardada (auto-login) saltan completeLogin() y nunca
+    // cargan datos si el WebSocket no conecta (típico en redes móviles / carrier proxies).
+    // Solución: si en 4s Firebase no conectó, cargar todo via REST.
+    if (ST.player) {
+      setTimeout(() => {
+        if (!ST.fbOK && !ST._restLoaded) _loadAllDataViaREST();
+      }, 4000);
+    }
+
     // Auto-refresh cada 4 horas
     const FOUR_HOURS = 4 * 60 * 60 * 1000;
     setInterval(() => refreshData(false), FOUR_HOURS);
@@ -2914,6 +2960,11 @@
       if (document.visibilityState === 'visible') {
         updateRefreshLabel();
         if (Date.now() - ST.lastFetch > FOUR_HOURS) refreshData(false);
+        // Sin WebSocket activo: refrescar datos via REST al volver a la app
+        if (!ST.fbOK && ST.player) {
+          ST._restLoaded = false; // forzar recarga de datos frescos
+          _loadAllDataViaREST();
+        }
       }
     });
   }
