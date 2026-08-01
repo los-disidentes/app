@@ -1528,8 +1528,13 @@
     if (ST.fbDb) return; // Guard — evitar doble inicialización
     try {
       ST.fbDb = firebase.database();
+      // Timer: si en 8s no conectó, mostrar mensaje menos alarmante
+      const _connTimer = setTimeout(() => {
+        if (!ST.fbOK) setStatus(false, '📡 Sin conexión directa — podés iniciar igual');
+      }, 8000);
       ST.fbDb.ref('.info/connected').on('value', s => {
         const ok = s.val() === true;
+        if (ok) clearTimeout(_connTimer);
         setStatus(ok, ok ? '🍇 Conectado' : 'Reconectando…');
         if (ok && ST.player) {
           checkAdmin();
