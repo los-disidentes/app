@@ -1,0 +1,92 @@
+name: Actualizar datos de la liga
+
+on:
+  schedule:
+    - cron: '0 */2 * * *'   # cada 2 horas
+  workflow_dispatch:          # también desde la pestaña Actions manualmente
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch fixture
+        run: |
+          curl -sf \
+            -H "User-Agent: Mozilla/5.0 (X11; Linux x86_64) Chrome/120" \
+            -H "Accept: application/json, */*" \
+            -H "Referer: https://www.ligacountrysur.com.ar/" \
+            "https://www.ligacountrysur.com.ar/api/fixture_mod.php?NroCampeonato=$CAMP_ID" \
+            -o app/fixture.json \
+            || echo 'null' > app/fixture.json
+        env:
+          CAMP_ID: 2155
+
+      - name: Fetch standings
+        run: |
+          curl -sf \
+            -H "User-Agent: Mozilla/5.0 (X11; Linux x86_64) Chrome/120" \
+            -H "Accept: application/json, */*" \
+            -H "Referer: https://www.ligacountrysur.com.ar/" \
+            "https://www.ligacountrysur.com.ar/api/tabla_posiciones.php?NroCampeonato=$CAMP_ID" \
+            -o app/standings.json \
+            || echo 'null' > app/standings.json
+        env:
+          CAMP_ID: 2155
+
+      - name: Fetch resultados de partidos
+        run: |
+          mkdir -p app/results
+          # Parsear los IDs de partidos propios del fixture
+          python3 << 'EOF'
+          import json, subprocess, sys
+
+          try:
+            with open('app/fixture.json') as f:
+              data = json.load(f)
+          except Exception:
+            sys.exit(0)
+
+          if not data:
+            sys.exit(0)
+
+          team_kw = ['disidentes', 'miralagos los']
+
+          for fecha in data:
+            for p in fecha.get('partidos', []):
+              local  = (p.get('Local')     or '').lower()
+              visit  = (p.get('Visitante') or '').lower()
+              is_our = any(k in local or k in visit for k in team_kw)
+              if not is_our:
+                continue
+              nid = p.get('NroPartidoCampeonato')
+              if not nid:
+                continue
+              url = f"https://www.ligacountrysur.com.ar/resultadopartidotenis_visita.php?NroPartidoCampeonato={nid}"
+              result = subprocess.run(
+                [
+                  'curl', '-sf',
+                  '-H', 'User-Agent: Mozilla/5.0 (X11; Linux x86_64) Chrome/120',
+                  '-H', 'Accept: application/json, */*',
+                  '-H', 'Referer: https://www.ligacountrysur.com.ar/',
+                  '-o', f'app/results/{nid}.json',
+                  url,
+                ],
+                capture_output=True, text=True
+              )
+              status = 'OK' if result.returncode == 0 else f'ERROR {result.returncode}'
+              print(f"Partido {nid}: {status}")
+          EOF
+
+      - name: Commit si hay cambios
+        run: |
+          git config user.email "bot@los-disidentes.github.io"
+          git config user.name "Liga Data Bot"
+          git add app/fixture.json app/standings.json app/results/ 2>/dev/null || true
+          git diff --staged --quiet \
+            || git commit -m "Liga data $(date -u +'%Y-%m-%d %H:%M') UTC"
+          git push || true
