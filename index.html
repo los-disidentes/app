@@ -1743,13 +1743,15 @@
           appId:             '1:658281523905:web:d46d80c740dd2b86d20240',
         });
       }
-      // Auth anónimo en paralelo con la conexión DB.
-      // El token JWT de auth anónimo se adjunta al WebSocket; sin él, carriers
-      // móviles argentinos cortan la WSS no autenticada. No esperamos a que
-      // termine: la DB empieza a conectar inmediatamente, y Firebase SDK
-      // actualiza el WebSocket al llegar el token (~1-2s).
-      try { firebase.auth().signInAnonymously().catch(() => {}); } catch(_) {}
-      _initFirebaseDb();
+      // Auth anónimo ANTES de conectar la DB.
+      // El carrier móvil bloquea WebSocket sin token JWT; el token solo existe
+      // después de que signInAnonymously() resuelve. Con .catch().then() nos
+      // aseguramos de que _initFirebaseDb() corra con el token ya disponible,
+      // y si auth falla (sin internet o sin Anonymous auth en consola),
+      // iniciamos igual para que REST funcione.
+      firebase.auth().signInAnonymously()
+        .catch(e => console.warn('Auth anónima falló (continuando):', e))
+        .then(() => _initFirebaseDb());
     } catch(e) {
       console.error('Firebase init error:', e);
       setStatus(false, 'Error al conectar Firebase');
