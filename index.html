@@ -1217,6 +1217,60 @@
     checkAdmin();
     updateAttBadge();
     updateLBFDatalist();
+    // Si WebSocket no conectó, cargar todos los datos via REST inmediatamente
+    if (!ST.fbOK) _loadAllDataViaREST();
+  }
+
+  // ═══════════════════════════════════════════
+  // REST FALLBACK — datos sin WebSocket
+  // ═══════════════════════════════════════════
+  async function _loadAllDataViaREST() {
+    if (ST._restLoaded) return;
+    ST._restLoaded = true;
+    const BASE = CFG.fbDefaultUrl;
+
+    // LBF
+    try {
+      const r = await fetch(`${BASE}/lbf.json`);
+      if (r.ok) {
+        const data = await r.json();
+        if (data && Array.isArray(data) && !ST.lbf?.length) {
+          ST.lbf = data;
+          localStorage.setItem('lbf', JSON.stringify(data));
+          updateLBFDatalist();
+          if (ST.activeTab === 'lbf')        renderLBF();
+          if (ST.activeTab === 'asistencia') renderAtt();
+          if (ST.activeTab === 'parejas')    renderParejas();
+        }
+      }
+    } catch(_) {}
+
+    // Config (lbfLocked ya cubierto en checkAdmin; presencia no disponible sin WS)
+    try {
+      const r = await fetch(`${BASE}/config/lbfLocked.json`);
+      if (r.ok) {
+        const locked = !!(await r.json());
+        if (ST.lbfLocked !== locked) {
+          ST.lbfLocked = locked;
+          localStorage.setItem('lbfLocked', String(locked));
+          if (ST.activeTab === 'lbf') renderLBF();
+        }
+      }
+    } catch(_) {}
+
+    // Chat — últimos 120 mensajes
+    try {
+      const r = await fetch(`${BASE}/chat.json?orderBy=%22ts%22&limitToLast=120`);
+      if (r.ok) {
+        const data = await r.json();
+        if (data && !ST.chat?.length) {
+          ST.chat = Object.entries(data)
+            .map(([id, m]) => ({ id, ...m }))
+            .sort((a, b) => a.ts - b.ts);
+          if (ST.activeTab === 'chat') renderChat();
+        }
+      }
+    } catch(_) {}
   }
 
   // ═══════════════════════════════════════════
@@ -1237,10 +1291,14 @@
       applyAdminUI();
     }
     if (!ST.fbDb || !ST.player) return;
-    // Verificar en Firebase (puede cambiar el estado si fue removido)
-    Promise.all([
-      ST.fbDb.ref(`config/admins/${fbKey(ST.player)}`).once('value'),
-      ST.fbDb.ref(`config/superAdmins/${fbKey(ST.player)}`).once('value'),
+    // Verificar en Firebase con timeout — si no conecta, caer a REST
+    const _to = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 3000));
+    Promise.race([
+      Promise.all([
+        ST.fbDb.ref(`config/admins/${fbKey(ST.player)}`).once('value'),
+        ST.fbDb.ref(`config/superAdmins/${fbKey(ST.player)}`).once('value'),
+      ]),
+      _to,
     ]).then(([admSnap, superSnap]) => {
       const isSA = !!superSnap.val();
       ST.isSuperAdmin = isSA;
@@ -1248,13 +1306,21 @@
         normalizeName(ST.player) === normalizeName(CFG.bootstrapAdmin);
       applyAdminUI();
     }).catch(e => {
-      console.warn('checkAdmin error:', e);
-      // En error de red, mantener lo ya seteado (bootstrap si aplica)
-      if (!isBootstrapAdmin()) {
-        ST.isAdmin = false;
-        ST.isSuperAdmin = false;
-        applyAdminUI();
-      }
+      console.warn('checkAdmin sin WebSocket, intentando REST:', e.message);
+      // Fallback REST — HTTPS puro, sin WebSocket
+      fetch(`${CFG.fbDefaultUrl}/config.json`)
+        .then(r => r.json())
+        .then(data => {
+          if (!data || !ST.player) return;
+          const key = fbKey(ST.player);
+          const isSA  = !!(data.superAdmins?.[key]);
+          const isAdm = !!(data.admins?.[key]);
+          ST.isAdmin      = isAdm || isSA || isBootstrapAdmin();
+          ST.isSuperAdmin = isSA  || isBootstrapAdmin();
+          applyAdminUI();
+        }).catch(() => {
+          if (!isBootstrapAdmin()) { ST.isAdmin = false; ST.isSuperAdmin = false; applyAdminUI(); }
+        });
     });
   }
 
@@ -2786,6 +2852,16 @@
 
   function initGallery() {
     if (!ST.fbDb) return;
+    // Cargar via REST de inmediato (funciona sin WebSocket)
+    fetch(`${CFG.fbDefaultUrl}/gallery.json`)
+      .then(r => r.json())
+      .then(data => {
+        if (data && !Object.keys(_galleryItems).length) {
+          _galleryItems = data;
+          if (ST.activeTab === 'galeria') renderGallery();
+        }
+      }).catch(() => {});
+    // Listener WebSocket para actualizaciones en tiempo real
     ST.fbDb.ref('gallery').on('value', snap => {
       _galleryItems = snap.val() || {};
       if (ST.activeTab === 'galeria') renderGallery();
@@ -3016,8 +3092,12 @@
         _installPrompt = null;
       });
     } else {
-      // Fallback: instrucciones manuales via toast
-      toast('Usá el menú ⋮ del navegador → "Agregar a pantalla de inicio"', 4000);
+      // Fallback: ya está instalada o el navegador no soporta el prompt
+      const hint = document.getElementById('install-card-hint') || document.getElementById('login-install-hint');
+      if (hint) {
+        hint.textContent = 'Si ya la instalaste, buscala en tu pantalla de inicio. Si no: menú ⋮ → "Agregar a pantalla de inicio"';
+      }
+      toast('Menú ⋮ del navegador → "Agregar a pantalla de inicio"', 5000);
     }
   }
 
