@@ -1372,12 +1372,33 @@
       return;
     }
 
-    const [playersSnap, adminsSnap] = await Promise.all([
-      ST.fbDb.ref('players').once('value'),
-      ST.fbDb.ref('config/admins').once('value'),
-    ]);
-    const players = playersSnap.val() || {};
-    const admins  = adminsSnap.val()  || {};
+    let players = {}, admins = {};
+    try {
+      const _to = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 4000));
+      const [playersSnap, adminsSnap] = await Promise.race([
+        Promise.all([
+          ST.fbDb.ref('players').once('value'),
+          ST.fbDb.ref('config/admins').once('value'),
+        ]),
+        _to,
+      ]);
+      players = playersSnap.val() || {};
+      admins  = adminsSnap.val()  || {};
+    } catch(_) {
+      // WebSocket no disponible — cargar via REST
+      try {
+        const BASE = CFG.fbDefaultUrl;
+        const [rp, ra] = await Promise.all([
+          fetch(`${BASE}/players.json`).then(r => r.json()),
+          fetch(`${BASE}/config/admins.json`).then(r => r.json()),
+        ]);
+        players = rp || {};
+        admins  = ra || {};
+      } catch(e2) {
+        wrap.innerHTML = '<div class="txs tmuted tcenter">Sin conexión — no se pudo cargar la lista.</div>';
+        return;
+      }
+    }
     const entries = Object.entries(players).sort((a,b) => a[1].name.localeCompare(b[1].name));
 
     if (!entries.length) {
@@ -2437,7 +2458,20 @@
   }
   async function loadRegisteredPlayersDatalist(){
     if(!ST.fbDb) return;
-    const snap = await ST.fbDb.ref('players').once('value');
+    let snap;
+    try {
+      const _to = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 3000));
+      snap = await Promise.race([ST.fbDb.ref('players').once('value'), _to]);
+    } catch(_) {
+      try {
+        const data = await fetch(`${CFG.fbDefaultUrl}/players.json`).then(r => r.json());
+        const dl = document.getElementById('registered-players-list');
+        if (dl && data) {
+          dl.innerHTML = Object.values(data).map(p=>`<option value="${esc(p.name)}">`).join('');
+        }
+      } catch(e2) {}
+      return;
+    }
     const players = Object.values(snap.val()||{});
     const dl = document.getElementById('registered-players-list');
     if(dl) dl.innerHTML = players.map(p=>`<option value="${esc(p.name)}">`).join('');
@@ -2523,13 +2557,30 @@
       return;
     }
 
-    // Cargar attendance y formation en paralelo
-    const [attSnap, formSnap] = await Promise.all([
-      ST.fbDb.ref('attendance').once('value'),
-      ST.fbDb.ref('formation').once('value'),
-    ]);
-    const allAtt  = attSnap.val()  || {};
-    const allForm = formSnap.val() || {};
+    // Cargar attendance y formation en paralelo (timeout + REST fallback)
+    let allAtt = {}, allForm = {};
+    try {
+      const _to = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 5000));
+      const [attSnap, formSnap] = await Promise.race([
+        Promise.all([
+          ST.fbDb.ref('attendance').once('value'),
+          ST.fbDb.ref('formation').once('value'),
+        ]),
+        _to,
+      ]);
+      allAtt  = attSnap.val()  || {};
+      allForm = formSnap.val() || {};
+    } catch(_) {
+      try {
+        const BASE = CFG.fbDefaultUrl;
+        const [ra, rf] = await Promise.all([
+          fetch(`${BASE}/attendance.json`).then(r => r.json()),
+          fetch(`${BASE}/formation.json`).then(r => r.json()),
+        ]);
+        allAtt  = ra || {};
+        allForm = rf || {};
+      } catch(e2) {}
+    }
 
     // Jugadores: todos los que están en la LBF o aparecieron alguna vez en attendance
     const playerSet = new Set(ST.lbf.map(p => p.name));
@@ -2649,8 +2700,17 @@
     const monthNames = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
     const monthLabel = `${monthNames[parseInt(mm,10)-1]} ${yy}`;
 
-    const paySnap = await ST.fbDb.ref(`payments/${curMonth}`).once('value');
-    const pays = paySnap.val() || {};
+    let pays = {};
+    try {
+      const _to = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 4000));
+      const paySnap = await Promise.race([ST.fbDb.ref(`payments/${curMonth}`).once('value'), _to]);
+      pays = paySnap.val() || {};
+    } catch(_) {
+      try {
+        const r = await fetch(`${CFG.fbDefaultUrl}/payments/${curMonth}.json`);
+        pays = (r.ok ? await r.json() : null) || {};
+      } catch(e2) {}
+    }
 
     const players = ST.lbf.map(p => p.name);
     if (!players.length) {
