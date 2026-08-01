@@ -1020,7 +1020,11 @@
 
     if (ST.fbDb) {
       try {
-        const snap = await ST.fbDb.ref(`players/${fbKey(name)}`).once('value');
+        const _timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 8000));
+        const snap = await Promise.race([
+          ST.fbDb.ref(`players/${fbKey(name)}`).once('value'),
+          _timeout,
+        ]);
         const existing = snap.val();
 
         if (existing) {
@@ -1187,6 +1191,11 @@
       // Bootstrap por nombre: el superAdmin siempre es admin
       ST.isAdmin = !!admSnap.val() || isSA ||
         normalizeName(ST.player) === normalizeName(CFG.bootstrapAdmin);
+      applyAdminUI();
+    }).catch(e => {
+      console.warn('checkAdmin error:', e);
+      ST.isAdmin = normalizeName(ST.player) === normalizeName(CFG.bootstrapAdmin);
+      ST.isSuperAdmin = ST.isAdmin;
       applyAdminUI();
     });
   }
