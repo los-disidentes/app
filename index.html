@@ -1176,8 +1176,25 @@
               btn.textContent = 'Entrar al equipo 🎾'; btn.disabled = false;
               return;
             } else {
-              // Usuario no existe — no se puede registrar sin WebSocket
-              errEl.textContent = '⚠️ Sin conexión estable. Reintentá en unos segundos.';
+              // Usuario no existe — registrar via REST (funciona sin WebSocket, solo HTTPS)
+              try {
+                btn.textContent = 'Registrando…';
+                const newSalt = generateSalt();
+                const newHash = await hashPin(pin, newSalt);
+                const playerData = { name, pinHash: newHash, pinSalt: newSalt, createdAt: Date.now(), lastLogin: Date.now() };
+                const writeResp = await fetch(`${DB_REST}/players/${fbKey(name)}.json`, {
+                  method: 'PUT',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(playerData)
+                });
+                if (!writeResp.ok) throw new Error(`HTTP ${writeResp.status}`);
+                toast(`✅ ¡Registrado como ${name}!`);
+                localStorage.removeItem(attKey); localStorage.removeItem(lockKey);
+                completeLogin(name, newHash, newSalt);
+              } catch(regErr) {
+                console.error('REST registration failed:', regErr);
+                errEl.textContent = '⚠️ Error al registrar. Chequeá tu conexión.';
+              }
               btn.textContent = 'Entrar al equipo 🎾'; btn.disabled = false;
               return;
             }
@@ -1288,8 +1305,9 @@
     } catch(_) {}
 
     // Chat — últimos 120 mensajes
+    // orderBy="$key" funciona sin índice en las reglas; push-keys son cronológicamente ordenadas
     try {
-      const r = await fetch(`${BASE}/chat.json?orderBy=%22ts%22&limitToLast=120`);
+      const r = await fetch(`${BASE}/chat.json?orderBy=%22%24key%22&limitToLast=120`);
       if (r.ok) {
         const data = await r.json();
         if (data) {
@@ -1335,6 +1353,9 @@
         }
       } catch(_) {}
     }
+
+    // Datos cargados via REST — actualizar status para no quedar "Reconectando…" para siempre
+    if (!ST.fbOK) setStatus(false, '📡 Online (sin tiempo real)');
   }
 
   // ═══════════════════════════════════════════
@@ -2951,11 +2972,12 @@
     // completeLogin() llama _loadAllDataViaREST() sólo en login manual.
     // Usuarios con sesión guardada (auto-login) saltan completeLogin() y nunca
     // cargan datos si el WebSocket no conecta (típico en redes móviles / carrier proxies).
-    // Solución: si en 4s Firebase no conectó, cargar todo via REST.
+    // Solución: si en 500ms Firebase no conectó via WebSocket, cargar todo via REST.
+    // 500ms es suficiente para que WebSocket conecte en desktop; en móvil nunca conecta.
     if (ST.player) {
       setTimeout(() => {
         if (!ST.fbOK && !ST._restLoaded) _loadAllDataViaREST();
-      }, 4000);
+      }, 500);
     }
 
     // Auto-refresh cada 4 horas
