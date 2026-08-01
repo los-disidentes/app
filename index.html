@@ -490,6 +490,31 @@
   <!-- INPUT FILE OCULTO PARA GALERÍA -->
   <input type="file" id="gallery-file-input" accept="image/*" style="display:none" onchange="handleGalleryFile(event)">
 
+  <!-- MODAL INSTRUCCIONES ANDROID -->
+  <div id="android-modal" class="modal-ov hidden">
+    <div class="modal-box" style="max-width:360px;">
+      <div class="modal-hdr">
+        <span>Instalar en Android</span>
+        <button class="modal-x" onclick="document.getElementById('android-modal').classList.add('hidden')">✕</button>
+      </div>
+      <div style="padding:12px 0 4px;">
+        <div class="ios-step">
+          <span class="step-icon">⋮</span>
+          <div class="step-txt"><strong>1. Abrí el menú de Chrome</strong>Tocá los tres puntitos arriba a la derecha</div>
+        </div>
+        <div class="ios-step">
+          <span class="step-icon">➕</span>
+          <div class="step-txt"><strong>2. "Agregar a pantalla de inicio"</strong>O puede decir <em>"Instalar app"</em> según la versión de Chrome</div>
+        </div>
+        <div class="ios-step">
+          <span class="step-icon">✅</span>
+          <div class="step-txt"><strong>3. Confirmar</strong>Tocá <em>"Agregar"</em> o <em>"Instalar"</em>. ¡Listo! Ya aparece en tu home.</div>
+        </div>
+      </div>
+      <button class="btn btn-p btn-full" style="margin-top:8px;" onclick="document.getElementById('android-modal').classList.add('hidden')">Entendido</button>
+    </div>
+  </div>
+
   <!-- MODAL INSTRUCCIONES iOS -->
   <div id="ios-modal" class="modal-ov hidden">
     <div class="modal-box" style="max-width:360px;">
@@ -3092,12 +3117,8 @@
         _installPrompt = null;
       });
     } else {
-      // Fallback: ya está instalada o el navegador no soporta el prompt
-      const hint = document.getElementById('install-card-hint') || document.getElementById('login-install-hint');
-      if (hint) {
-        hint.textContent = 'Si ya la instalaste, buscala en tu pantalla de inicio. Si no: menú ⋮ → "Agregar a pantalla de inicio"';
-      }
-      toast('Menú ⋮ del navegador → "Agregar a pantalla de inicio"', 5000);
+      // Fallback: ya está instalada o Chrome no disparó el prompt — mostrar instrucciones
+      document.getElementById('android-modal').classList.remove('hidden');
     }
   }
 
