@@ -30,7 +30,7 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,400;0,600;0,700;1,600;1,700&family=Lato:wght@400;700&display=swap">
   <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+  <!-- firebase-auth-compat removido: sin auth, el SDK abre WebSocket de inmediato (fix mobile) -->
 
   <style>
     /* ── VARIABLES ─────────────────────────────── */
@@ -1514,15 +1514,10 @@
           appId:             '1:658281523905:web:d46d80c740dd2b86d20240',
         });
       }
-      // Iniciar DB inmediatamente — no esperar auth
-      // Las reglas de Firebase tienen .read: true, por lo que las lecturas
-      // funcionan sin auth. Auth se lanza en paralelo para las escrituras.
+      // Sin firebase-auth: el SDK conecta WebSocket de inmediato (fix mobile).
+      // Las reglas de Firebase tienen .write: true (con superAdmins protegido),
+      // así que no se necesita auth para lecturas ni escrituras normales.
       _initFirebaseDb();
-      firebase.auth().onAuthStateChanged(user => {
-        if (!user) {
-          firebase.auth().signInAnonymously().catch(err => {
-            console.warn('Firebase anonymous auth failed:', err.code);
-          });
         }
         // Una vez que Firebase tiene usuario, refresca listeners sensibles
         // (los writes necesitan auth != null; el SDK los reintenta automáticamente)
@@ -1626,12 +1621,40 @@
   // ═══════════════════════════════════════════
   // LIGA API
   // ═══════════════════════════════════════════
+  // Devuelve la ruta local del archivo de liga cacheado por GitHub Actions, o null.
+  function _ligaLocalPath(path) {
+    if (path.includes('fixture_mod'))              return '/app/fixture.json';
+    if (path.includes('tabla_posiciones'))         return '/app/standings.json';
+    if (path.includes('resultadopartidotenis_visita')) {
+      const m = path.match(/NroPartidoCampeonato=(\d+)/);
+      if (m) return '/app/results/' + m[1] + '.json';
+    }
+    return null;
+  }
+
   async function apiGet(path) {
     const url = CFG.ligaBase + path;
+
+    // 1. Archivos locales cacheados por GitHub Actions (actualiza cada 2h, sin CORS)
+    const localPath = _ligaLocalPath(path);
+    if (localPath) {
+      try {
+        const r = await fetch(localPath, { signal: AbortSignal.timeout(3000) });
+        if (r.ok) {
+          const data = await r.json();
+          // null o [] → datos iniciales vacíos → seguir al proxy
+          if (data && !(Array.isArray(data) && data.length === 0)) return data;
+        }
+      } catch(_) {}
+    }
+
+    // 2. CORS proxy como fallback
     try {
       const r = await fetch(CFG.corsProxy + encodeURIComponent(url), { signal: AbortSignal.timeout(6000) });
       return JSON.parse(await r.text());
     } catch(_) {}
+
+    // 3. Directo (funciona si el navegador tiene CORS permisivo)
     try {
       const r = await fetch(url, { signal: AbortSignal.timeout(4000) });
       return await r.json();
