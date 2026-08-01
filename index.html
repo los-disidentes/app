@@ -80,8 +80,9 @@
       font-size: 0.66rem; color: rgba(255,255,255,0.65); letter-spacing: 0.3px; flex-shrink: 0;
     }
     .sdot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); transition: background .4s; }
-    .sdot.on  { background: #5DEFA0; }
-    .sdot.off { background: #e05a6a; }
+    .sdot.on   { background: #5DEFA0; }             /* verde  — WebSocket en tiempo real */
+    .sdot.rest { background: #F59E0B; }             /* ámbar  — REST OK, sin tiempo real */
+    .sdot.off  { background: #e05a6a; }
 
     /* ── HEADER ─────────────────────────────────── */
     .header {
@@ -1354,8 +1355,12 @@
       } catch(_) {}
     }
 
-    // Datos cargados via REST — actualizar status para no quedar "Reconectando…" para siempre
-    if (!ST.fbOK) setStatus(false, '📡 Online (sin tiempo real)');
+    // Datos cargados via REST — punto ámbar (funciona, pero sin tiempo real)
+    if (!ST.fbOK) {
+      const dot = document.getElementById('sdot');
+      if (dot) dot.className = 'sdot rest';
+      document.getElementById('stext').textContent = '📡 Online (sin tiempo real)';
+    }
   }
 
   // ═══════════════════════════════════════════
