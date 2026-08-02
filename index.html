@@ -1956,7 +1956,7 @@
     const newPlayed = matches.filter(m=>m.played).length;
     const oldPlayed = ST.fixture.filter(m=>m.played).length;
     if (newPlayed !== oldPlayed) { ST.perfLoaded = false; ST.perfs = []; } // nuevo resultado → recalcular stats
-    ST.fixture = matches.sort((a,b) => new Date(a.fecha)-new Date(b.fecha));
+    ST.fixture = matches.sort((a,b) => pDate(a.fecha)-pDate(b.fecha));
     localStorage.setItem('fixture', JSON.stringify(ST.fixture));
     renderFixture();
     if (ST.fbDb) { const nm = nextMatch(); if (nm) watchAttendance(nm.id); }
@@ -2080,11 +2080,18 @@
   // ═══════════════════════════════════════════
   // HELPERS
   // ═══════════════════════════════════════════
-  function nextMatch() { const t=new Date();t.setHours(0,0,0,0);const up=ST.fixture.filter(m=>!m.played&&new Date(m.fecha)>=t);return up.length?up[0]:null; }
-  function isLocked(m) { return m?(new Date(m.fecha)-new Date())/86400000<=CFG.lockDays:false; }
-  function daysUntil(s) { const d=new Date(s);d.setHours(0,0,0,0);const t=new Date();t.setHours(0,0,0,0);return Math.round((d-t)/86400000); }
+  function nextMatch() { const t=new Date();t.setHours(0,0,0,0);const up=ST.fixture.filter(m=>!m.played&&pDate(m.fecha)>=t);return up.length?up[0]:null; }
+  // Parsea 'YYYY-MM-DD' como fecha LOCAL. new Date('2026-03-22') la interpreta como
+  // UTC y en Argentina (UTC-3) muestra el 21 → corrimiento de un día en todo el fixture.
+  function pDate(s) {
+    if (s instanceof Date) return s;
+    const m = String(s||'').match(/^(\d{4})-(\d{2})-(\d{2})/);
+    return m ? new Date(+m[1], +m[2]-1, +m[3]) : new Date(s);
+  }
+  function isLocked(m) { return m?(pDate(m.fecha)-new Date())/86400000<=CFG.lockDays:false; }
+  function daysUntil(s) { const d=pDate(s);d.setHours(0,0,0,0);const t=new Date();t.setHours(0,0,0,0);return Math.round((d-t)/86400000); }
   function fmtDate(s) {
-    const d=new Date(s);
+    const d=pDate(s);
     const days=['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
     const months=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
     return `${days[d.getDay()]} ${d.getDate()} ${months[d.getMonth()]}`;
@@ -2113,7 +2120,7 @@
     const nm=nextMatch(), wrap=document.getElementById('next-match-wrap');
     if (!nm) {
       // Sin próxima fecha → mostrar igual el fixture completo del torneo
-      const all = ST.fixture.slice().sort((a,b) => new Date(a.fecha) - new Date(b.fecha));
+      const all = ST.fixture.slice().sort((a,b) => pDate(a.fecha) - pDate(b.fecha));
       wrap.innerHTML = '<div class="empty"><div class="ei">🏆</div><h3>Torneo finalizado</h3><p>Sin próximas fechas. Esperando el Clausura 2026.</p></div>'
         + (all.length ? `
         <div class="slabel">FIXTURE DEL TORNEO</div>
@@ -3458,7 +3465,7 @@
     document.body.appendChild(panel);
     const out = document.getElementById('dbg-out');
     const info = {
-      appVersion: 'v47',
+      appVersion: 'v48',
       installPromptReady: !!_installPrompt,
       fbOK: ST?.fbOK,
       player: ST?.player,
