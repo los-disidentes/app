@@ -1310,14 +1310,7 @@
           ST.chat = Object.entries(data)
             .map(([id, m]) => ({ id, ...m }))
             .sort((a, b) => a.ts - b.ts);
-          const last = ST.chat[ST.chat.length - 1];
-          if (last && last.ts > ST.lastChatSeen && last.player !== ST.player) {
-            ST.unreadChat++;
-            if (ST.activeTab !== 'chat') {
-              const b = document.getElementById('badge-chat');
-              if (b) { b.textContent = ST.unreadChat; b.classList.remove('hidden'); }
-            }
-          }
+          updateChatBadge();
           if (ST.activeTab === 'chat') renderChat();
         }
       }
@@ -1371,12 +1364,7 @@
         const chatR = await fetch(`${BASE}/chat.json?orderBy=%22%24key%22&limitToLast=120`).then(r => r.json());
         if (chatR) {
           ST.chat = Object.entries(chatR).map(([id,m]) => ({id,...m})).sort((a,b) => a.ts - b.ts);
-          const lastMsg = ST.chat[ST.chat.length - 1];
-          if (lastMsg && lastMsg.ts > ST.lastChatSeen && lastMsg.player !== ST.player) {
-            ST.unreadChat++;
-            const b = document.getElementById('badge-chat');
-            if (b && ST.activeTab !== 'chat') { b.textContent = ST.unreadChat; b.classList.remove('hidden'); }
-          }
+          updateChatBadge();
           if (ST.activeTab === 'chat') renderChat();
         }
         if (nm) {
@@ -1395,6 +1383,23 @@
 
   function _stopPolling() {
     if (ST._pollTimer) { clearInterval(ST._pollTimer); ST._pollTimer = null; }
+  }
+
+  // Badge del chat — conteo real de no leídos (idempotente, no acumula)
+  function updateChatBadge() {
+    const b = document.getElementById('badge-chat');
+    if (!b) return;
+    if (ST.activeTab === 'chat') {
+      ST.unreadChat = 0;
+      b.classList.add('hidden');
+      return;
+    }
+    const n = (ST.chat || []).filter(m =>
+      m && m.ts > ST.lastChatSeen && m.player !== ST.player
+    ).length;
+    ST.unreadChat = n;
+    if (n > 0) { b.textContent = n > 9 ? '9+' : n; b.classList.remove('hidden'); }
+    else       { b.classList.add('hidden'); }
   }
 
   // ═══════════════════════════════════════════
@@ -1836,14 +1841,7 @@
         const d = s.val();
         if (!d) return;
         ST.chat = Object.entries(d).map(([id,m]) => ({id,...m})).sort((a,b) => a.ts - b.ts);
-        const last = ST.chat[ST.chat.length-1];
-        if (last && last.ts > ST.lastChatSeen && last.player !== ST.player) {
-          ST.unreadChat++;
-          if (ST.activeTab !== 'chat') {
-            const b = document.getElementById('badge-chat');
-            b.textContent = ST.unreadChat; b.classList.remove('hidden');
-          }
-        }
+        updateChatBadge();
         if (ST.activeTab === 'chat') renderChat();
       });
       if (nm) {
@@ -3442,7 +3440,7 @@
     document.body.appendChild(panel);
     const out = document.getElementById('dbg-out');
     const info = {
-      appVersion: 'v45',
+      appVersion: 'v46',
       installPromptReady: !!_installPrompt,
       fbOK: ST?.fbOK,
       player: ST?.player,
