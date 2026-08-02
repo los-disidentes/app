@@ -30,11 +30,6 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,400;0,600;0,700;1,600;1,700&family=Lato:wght@400;700&display=swap">
   <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
-  <!-- Auth anónimo: sin token, carriers móviles cortan la WSS no autenticada.
-       Con signInAnonymously() el SDK adjunta un token JWT al handshake WebSocket
-       y la conexión pasa en redes móviles. No afecta la autenticación de jugadores
-       (que es name+PIN propio). La DB se conecta en paralelo, sin esperar auth. -->
 
   <style>
     /* ── VARIABLES ─────────────────────────────── */
@@ -1743,15 +1738,11 @@
           appId:             '1:658281523905:web:d46d80c740dd2b86d20240',
         });
       }
-      // Auth anónimo ANTES de conectar la DB.
-      // El carrier móvil bloquea WebSocket sin token JWT; el token solo existe
-      // después de que signInAnonymously() resuelve. Con .catch().then() nos
-      // aseguramos de que _initFirebaseDb() corra con el token ya disponible,
-      // y si auth falla (sin internet o sin Anonymous auth en consola),
-      // iniciamos igual para que REST funcione.
-      firebase.auth().signInAnonymously()
-        .catch(e => console.warn('Auth anónima falló (continuando):', e))
-        .then(() => _initFirebaseDb());
+      // Conectar DB directamente — sin auth anónima.
+      // La auth anónima fue removida: no mejoró la conectividad WebSocket en móvil
+      // y puede interferir con el handshake en algunos browsers/carriers.
+      // La DB opera con reglas .read: true / .write: true sin necesitar token.
+      _initFirebaseDb();
     } catch(e) {
       console.error('Firebase init error:', e);
       setStatus(false, 'Error al conectar Firebase');
