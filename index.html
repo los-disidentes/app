@@ -14,7 +14,7 @@
       - base-uri 'self' bloquea ataques de base-tag
       - form-action 'self' bloquea envío de formularios a orígenes externos
   -->
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline' https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self' https://*.firebaseio.com wss://*.firebaseio.com https://*.firebasedatabase.app wss://*.firebasedatabase.app https://*.googleapis.com https://api.allorigins.win https://www.ligacountrysur.com.ar https://api.imgbb.com; img-src 'self' https://los-disidentes.github.io https://*.ibb.co data: blob:; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'self'; form-action 'self';">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://*.firebaseio.com https://*.firebasedatabase.app; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self' https://*.firebaseio.com wss://*.firebaseio.com https://*.firebasedatabase.app wss://*.firebasedatabase.app https://*.googleapis.com https://api.allorigins.win https://www.ligacountrysur.com.ar https://api.imgbb.com; img-src 'self' https://los-disidentes.github.io https://*.ibb.co data: blob:; media-src 'none'; object-src 'none'; frame-src 'self' https://*.firebaseio.com; base-uri 'self'; form-action 'self';">
   <meta name="theme-color" content="#0F5F38">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -3442,7 +3442,8 @@
     document.body.appendChild(panel);
     const out = document.getElementById('dbg-out');
     const info = {
-      appVersion: 'v43',
+      appVersion: 'v44',
+      installPromptReady: !!_installPrompt,
       fbOK: ST?.fbOK,
       player: ST?.player,
       sdot: document.getElementById('sdot')?.className,
