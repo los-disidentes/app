@@ -14,7 +14,7 @@
       - base-uri 'self' bloquea ataques de base-tag
       - form-action 'self' bloquea envío de formularios a orígenes externos
   -->
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline' https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src https://*.firebaseio.com wss://*.firebaseio.com https://*.googleapis.com https://api.allorigins.win https://www.ligacountrysur.com.ar https://api.imgbb.com; img-src 'self' https://los-disidentes.github.io https://*.ibb.co data: blob:; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'self'; form-action 'self';">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline' https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self' https://*.firebaseio.com wss://*.firebaseio.com https://*.firebasedatabase.app wss://*.firebasedatabase.app https://*.googleapis.com https://api.allorigins.win https://www.ligacountrysur.com.ar https://api.imgbb.com; img-src 'self' https://los-disidentes.github.io https://*.ibb.co data: blob:; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'self'; form-action 'self';">
   <meta name="theme-color" content="#0F5F38">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -1350,12 +1350,51 @@
       } catch(_) {}
     }
 
-    // Datos cargados via REST — punto ámbar (funciona, pero sin tiempo real)
+    // Datos cargados via REST — punto ámbar + arrancar polling si no hay WebSocket
     if (!ST.fbOK) {
       const dot = document.getElementById('sdot');
       if (dot) dot.className = 'sdot rest';
-      document.getElementById('stext').textContent = '📡 Online (sin tiempo real)';
+      document.getElementById('stext').textContent = '📡 Online · actualiza c/30s';
+      _startPolling();
     }
+  }
+
+  // Polling ligero cada 30s cuando no hay WebSocket
+  function _startPolling() {
+    if (ST._pollTimer) return;
+    ST._pollTimer = setInterval(async () => {
+      if (ST.fbOK) { _stopPolling(); return; }
+      if (!ST.player) return;
+      try {
+        const BASE = CFG.fbDefaultUrl;
+        const nm = nextMatch();
+        const chatR = await fetch(`${BASE}/chat.json?orderBy=%22%24key%22&limitToLast=120`).then(r => r.json());
+        if (chatR) {
+          ST.chat = Object.entries(chatR).map(([id,m]) => ({id,...m})).sort((a,b) => a.ts - b.ts);
+          const lastMsg = ST.chat[ST.chat.length - 1];
+          if (lastMsg && lastMsg.ts > ST.lastChatSeen && lastMsg.player !== ST.player) {
+            ST.unreadChat++;
+            const b = document.getElementById('badge-chat');
+            if (b && ST.activeTab !== 'chat') { b.textContent = ST.unreadChat; b.classList.remove('hidden'); }
+          }
+          if (ST.activeTab === 'chat') renderChat();
+        }
+        if (nm) {
+          const attR = await fetch(`${BASE}/attendance/${encodeURIComponent(nm.id)}.json`).then(r => r.json());
+          if (attR) {
+            ST.attendance = {};
+            Object.values(attR).forEach(v => { if (v && v.player) ST.attendance[v.player] = v; });
+          } else { ST.attendance = {}; }
+          if (ST.activeTab === 'asistencia') renderAtt();
+          if (ST.activeTab === 'parejas')    renderParejas();
+          updateAttBadge();
+        }
+      } catch(e) { }
+    }, 30000);
+  }
+
+  function _stopPolling() {
+    if (ST._pollTimer) { clearInterval(ST._pollTimer); ST._pollTimer = null; }
   }
 
   // ═══════════════════════════════════════════
@@ -1759,7 +1798,7 @@
       }, 8000);
       ST.fbDb.ref('.info/connected').on('value', s => {
         const ok = s.val() === true;
-        if (ok) clearTimeout(_connTimer);
+        if (ok) { clearTimeout(_connTimer); _stopPolling(); }
         setStatus(ok, ok ? '🍇 Conectado' : 'Reconectando…');
         if (ok && ST.player) {
           checkAdmin();
