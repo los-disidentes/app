@@ -1,9 +1,9 @@
-// Service Worker — Los Disidentes App v44
-const CACHE = 'disidentes-v44';
+// Service Worker — Los Disidentes App v45
+const CACHE = 'disidentes-v45';
 const PRECACHE = ['/app/','/app/index.html','/app/manifest.json','/app/icon-192.png','/app/icon-512.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(PRECACHE)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', e => {
-  e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim()).then(() => self.clients.matchAll({type:'window'})).then(cs => cs.forEach(c => c.postMessage({type:'SW_UPDATED',version:'44'}))));
+  e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim()).then(() => self.clients.matchAll({type:'window'})).then(cs => cs.forEach(c => c.postMessage({type:'SW_UPDATED',version:'45'}))));
 });
 self.addEventListener('message', e => { if (e.data?.type === 'SKIP_WAITING') self.skipWaiting(); });
 self.addEventListener('fetch', e => {
