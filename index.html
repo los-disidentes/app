@@ -2112,7 +2112,25 @@
   function renderFixture() {
     const nm=nextMatch(), wrap=document.getElementById('next-match-wrap');
     if (!nm) {
-      wrap.innerHTML='<div class="empty"><div class="ei">🏆</div><h3>Torneo finalizado</h3><p>Sin próximas fechas.</p></div>';
+      // Sin próxima fecha → mostrar igual el fixture completo del torneo
+      const all = ST.fixture.slice().sort((a,b) => new Date(a.fecha) - new Date(b.fecha));
+      wrap.innerHTML = '<div class="empty"><div class="ei">🏆</div><h3>Torneo finalizado</h3><p>Sin próximas fechas. Esperando el Clausura 2026.</p></div>'
+        + (all.length ? `
+        <div class="slabel">FIXTURE DEL TORNEO</div>
+        ${all.map(m => {
+          const res = m.played
+            ? `<span class="result-chip ${(m.home?m.gL:m.gV) > (m.home?m.gV:m.gL) ? 'win':'loss'}">${m.home?m.gL:m.gV}–${m.home?m.gV:m.gL}</span>`
+            : `<span class="chip" style="opacity:.6;">—</span>`;
+          return `<div class="card" style="padding:12px 16px;">
+            <div class="flex" style="align-items:center;gap:10px;">
+              <span class="chip cx" style="font-family:var(--serif);font-size:.75rem;">F${m.rueda}</span>
+              <span class="flex1 tsm">${rival(m)}</span>
+              <span class="txs tmuted">${fmtDate(m.fecha)}</span>
+              <span class="chip ${m.home?'cg':'co'}">${m.home?'Local':'Visita'}</span>
+              ${res}
+            </div>
+          </div>`;
+        }).join('')}` : '');
     } else {
       const days=daysUntil(nm.fecha), locked=isLocked(nm);
       wrap.innerHTML=`
@@ -3440,7 +3458,7 @@
     document.body.appendChild(panel);
     const out = document.getElementById('dbg-out');
     const info = {
-      appVersion: 'v46',
+      appVersion: 'v47',
       installPromptReady: !!_installPrompt,
       fbOK: ST?.fbOK,
       player: ST?.player,
