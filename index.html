@@ -449,7 +449,7 @@
 <body>
 
   <!-- STATUS BAR -->
-  <div id="status-bar">
+  <div id="status-bar" onclick="_statusTap()">
     <span class="sdot" id="sdot"></span>
     <span id="stext">Iniciando…</span>
     <span id="online-list" style="margin-left:auto; font-size:0.6rem; color:rgba(174,205,185,0.7); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:58%;"></span>
@@ -3425,6 +3425,51 @@
 
   // Actualizar card al cargar la LBF tab
   window.addEventListener('load', () => setTimeout(updateInstallCard, 500));
+
+  // ═══════════════════════════════════════════
+  // DEBUG — 5 taps en status bar → diagnóstico
+  // ═══════════════════════════════════════════
+  let _tapCount = 0, _tapTimer = null;
+  async function _statusTap() {
+    _tapCount++;
+    clearTimeout(_tapTimer);
+    _tapTimer = setTimeout(() => { _tapCount = 0; }, 1500);
+    if (_tapCount < 5) return;
+    _tapCount = 0;
+    const panel = document.createElement('div');
+    panel.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:9999;overflow:auto;padding:20px;color:#fff;font-family:monospace;font-size:12px;';
+    panel.innerHTML = '<h3 style="color:#5DEFA0;margin:0 0 12px">🔧 Debug Info</h3><pre id="dbg-out">Cargando…</pre><button onclick="this.parentElement.remove()" style="margin-top:16px;padding:8px 20px;background:#e05a6a;border:none;border-radius:8px;color:#fff;font-size:14px;cursor:pointer;">Cerrar</button>';
+    document.body.appendChild(panel);
+    const out = document.getElementById('dbg-out');
+    const info = {
+      appVersion: 'v43',
+      fbOK: ST?.fbOK,
+      player: ST?.player,
+      sdot: document.getElementById('sdot')?.className,
+      pollTimer: !!ST?._pollTimer,
+      standalone: window.matchMedia('(display-mode: standalone)').matches || !!navigator.standalone,
+      online: navigator.onLine,
+      ua: navigator.userAgent,
+    };
+    try {
+      const reg = await navigator.serviceWorker?.getRegistration('/app/');
+      info.swScript = reg?.active?.scriptURL?.split('/').pop();
+      info.swState = reg?.active?.state;
+    } catch(e) { info.sw = 'error'; }
+    info.wsTest = 'probando WebSocket…';
+    out.textContent = JSON.stringify(info, null, 2);
+    const wsResult = await new Promise(resolve => {
+      try {
+        const ws = new WebSocket('wss://los-disidentes-app-default-rtdb.firebaseio.com/.ws?v=5');
+        const t = setTimeout(() => { ws.close(); resolve('TIMEOUT 5s'); }, 5000);
+        ws.onopen  = () => { clearTimeout(t); ws.close(); resolve('OPEN_OK ✅'); };
+        ws.onerror = e => { clearTimeout(t); resolve('ERROR: ' + e.type); };
+        ws.onclose = e => { clearTimeout(t); resolve('CLOSED code=' + e.code + ' clean=' + e.wasClean + ' reason="' + e.reason + '"'); };
+      } catch(e) { resolve('EXCEPTION: ' + e.message); }
+    });
+    info.wsTest = wsResult;
+    out.textContent = JSON.stringify(info, null, 2);
+  }
 
   // ═══════════════════════════════════════════
   // SERVICE WORKER — PWA + DETECCIÓN DE UPDATES
