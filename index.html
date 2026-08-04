@@ -2310,7 +2310,14 @@
   // ═══════════════════════════════════════════
   // RENDER: PAREJAS
   // ═══════════════════════════════════════════
+  // Wrapper: deja intacta la lógica real de parejas y le cuelga el simulador
+  // (solo admin) después, funcione o no el partido real.
   function renderParejas() {
+    _renderParejasCore();
+    _appendSimulador();
+  }
+
+  function _renderParejasCore() {
     const wrap=document.getElementById('parejas-content'),nm=nextMatch();
     if(!nm){wrap.innerHTML='<div class="empty"><div class="ei">📅</div><h3>Sin partidos</h3></div>';return;}
     const confNames=Object.entries(ST.attendance).filter(([,v])=>v.status==='confirmed').map(([k])=>k);
@@ -2376,6 +2383,228 @@
       </div>
     `;
     wrap._formations = formations;
+  }
+
+  // ═══════════════════════════════════════════
+  // SIMULADOR DE FORMACIONES (solo admin)
+  // ═══════════════════════════════════════════
+  let _escCargados = false; // los escenarios se traen una sola vez por sesión
+  let _simSel     = [];   // nombres marcados
+  let _simResults = [];   // últimas formaciones simuladas
+  let _scenarios  = {};   // escenarios guardados en Firebase
+
+  // Todas las formas de elegir k elementos de arr (sin repetir, sin importar orden)
+  function _combinations(arr, k) {
+    const res = [], cur = [];
+    (function walk(start) {
+      if (cur.length === k) { res.push(cur.slice()); return; }
+      for (let i = start; i < arr.length; i++) { cur.push(arr[i]); walk(i + 1); cur.pop(); }
+    })(0);
+    return res;
+  }
+
+  // Explora TODAS las combinaciones de 6 entre los marcados y devuelve las mejores.
+  // Art. 19: los presentes se renumeran 1–N por LBF; los 6 que juegan conservan
+  // ese número (no se renumeran de nuevo 1–6), que es lo que define las sumas.
+  function simulateFormations(nombres, topN = 8) {
+    const pool = ST.lbf
+      .filter(p => nombres.includes(p.name))
+      .sort((a, b) => (a.lbfPosition || 999) - (b.lbfPosition || 999))
+      .map((p, i) => ({ name: p.name, lbfPos: p.lbfPosition || (i + 1), mn: i + 1 }));
+    if (pool.length < 6) return [];
+
+    let best = [];
+    _combinations(pool, 6).forEach(six => {
+      const [a, ...rest] = six;
+      for (let i = 0; i < rest.length; i++) {
+        const pair1 = [a, rest[i]], rem = rest.filter((_, j) => j !== i);
+        for (let j = 0; j < rem.length - 1; j++) {
+          for (let k = j + 1; k < rem.length; k++) {
+            const pair2 = [rem[j], rem[k]], pair3 = rem.filter((_, x) => x !== j && x !== k);
+            const c = assignCourts([pair1, pair2, pair3]);
+            let perf = 0;
+            [c.d1, c.d2, c.d3].forEach(p => {
+              perf += pairPerf(p[0].name, p[1].name);
+              perf += (playerPct(p[0].name) + playerPct(p[1].name)) / 200;
+            });
+            best.push({ ...c, perf });
+          }
+        }
+      }
+      // Poda: con 19 jugadores son 27.132 combinaciones × 15 = +400.000 formaciones.
+      // Sin esto se dispara la memoria en el celular.
+      if (best.length > 3000) { best.sort((x, y) => y.perf - x.perf); best.length = topN; }
+    });
+    best.sort((x, y) => y.perf - x.perf);
+    return best.slice(0, topN);
+  }
+
+  function _appendSimulador() {
+    const wrap = document.getElementById('parejas-content');
+    if (!wrap || !ST.isAdmin) return;
+    const activos = ST.lbf.filter(p => p.active);
+    const n = _simSel.length;
+    const combis = n >= 6 ? _combinations(new Array(n).fill(0), 6).length : 0;
+
+    wrap.insertAdjacentHTML('beforeend', `
+      <div class="separator" style="margin:22px 0 14px;"></div>
+      <div class="slabel">🧪 SIMULADOR · SOLO PRUEBAS</div>
+      <div class="card">
+        <div class="txs tmuted" style="margin-bottom:10px;line-height:1.5;">
+          Marcá los jugadores que quieras y probá formaciones sin tocar la fecha real.
+          Nada de esto modifica la asistencia ni la formación confirmada.
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;">
+          ${activos.map(p => `
+            <button class="chip ${_simSel.includes(p.name) ? 'cg' : ''}"
+              style="cursor:pointer;border:1px solid ${_simSel.includes(p.name) ? 'var(--green)' : 'var(--line)'};padding:6px 10px;background:${_simSel.includes(p.name) ? 'var(--mint)' : 'transparent'};"
+              onclick="simToggle('${p.name.replace(/'/g, "\\'")}')">
+              ${p.lbfPosition}. ${esc(p.name)}
+            </button>`).join('')}
+        </div>
+        <div class="flex" style="gap:8px;align-items:center;flex-wrap:wrap;">
+          <span class="txs ${n >= 6 ? 'tgreen' : 'tmuted'}"><strong>${n}</strong> marcados${n >= 6 ? ` · ${combis} combinaciones` : ' · faltan ' + (6 - n)}</span>
+          <span class="flex1"></span>
+          <button class="btn btn-o btn-sm" onclick="simTodos()">Todos</button>
+          <button class="btn btn-o btn-sm" onclick="simLimpiar()">Limpiar</button>
+          <button class="btn btn-p btn-sm" onclick="simCorrer()" ${n < 6 ? 'disabled' : ''}>Simular</button>
+        </div>
+      </div>
+      <div id="sim-out"></div>
+      <div id="sim-saved"></div>
+    `);
+    _renderSimResultados();
+    _renderEscenarios();
+  }
+
+  function simToggle(name) {
+    const i = _simSel.indexOf(name);
+    if (i >= 0) _simSel.splice(i, 1); else _simSel.push(name);
+    renderParejas();
+  }
+  function simTodos()   { _simSel = ST.lbf.filter(p => p.active).map(p => p.name); renderParejas(); }
+  function simLimpiar() { _simSel = []; _simResults = []; renderParejas(); }
+
+  function simCorrer() {
+    if (_simSel.length < 6) { toast('Marcá al menos 6 jugadores'); return; }
+    const out = document.getElementById('sim-out');
+    if (out) out.innerHTML = '<div class="tcenter" style="padding:16px;"><span class="spin"></span><div class="txs tmuted mt8">Calculando…</div></div>';
+    setTimeout(() => {
+      const t0 = performance.now();
+      _simResults = simulateFormations(_simSel, 8);
+      const ms = Math.round(performance.now() - t0);
+      _renderSimResultados(ms);
+    }, 30);
+  }
+  function _renderSimResultados(ms) {
+    const out = document.getElementById('sim-out');
+    if (!out) return;
+    if (!_simResults.length) { out.innerHTML = ''; return; }
+    out.innerHTML = `
+      <div class="slabel">MEJORES FORMACIONES${ms != null ? ` · ${ms} ms` : ''}</div>
+      ${_simResults.map((f, idx) => `
+        <div class="fcard ${idx === 0 ? 'best' : ''}">
+          <div class="${idx === 0 ? 'txs tgreen fbold' : 'txs tmuted'}" style="margin-bottom:8px;">
+            ${idx === 0 ? '⭐ MEJOR OPCIÓN' : 'Opción ' + (idx + 1)}
+          </div>
+          ${['d1','d2','d3'].map(c => {
+            const pair = f[c], h = getPairHist(pair[0].name, pair[1].name);
+            return `<div class="crow">
+              <div class="clabel ${c}">${c.toUpperCase()}</div>
+              <div class="cplayers flex1">
+                <strong>${esc(pair[0].name)}</strong> · <strong>${esc(pair[1].name)}</strong>
+                <small>${h && h.tot > 0 ? `${h.W}/${h.tot} juntos` : 'Sin historial juntos'}</small>
+              </div>
+              <div class="csum">Σ${f[c + 's']}</div>
+            </div>`;
+          }).join('')}
+        </div>`).join('')}
+      <div class="card">
+        <div class="txs tmuted" style="margin-bottom:8px;">Guardar esta selección como escenario</div>
+        <div class="flex" style="gap:8px;">
+          <input id="sim-nombre" class="flex1" placeholder="Ej: Fecha 3 sin Rojo" maxlength="60"
+            style="padding:9px 11px;border:1px solid var(--line);border-radius:9px;font-family:var(--sans);font-size:.85rem;">
+          <button class="btn btn-p btn-sm" onclick="simGuardar()">Guardar</button>
+        </div>
+      </div>`;
+  }
+
+  async function simGuardar() {
+    const inp = document.getElementById('sim-nombre');
+    const name = (inp?.value || '').trim();
+    if (!name) { toast('Poné un nombre al escenario'); return; }
+    const data = { name, players: _simSel.slice(), createdBy: ST.player || '—', ts: Date.now() };
+    try {
+      if (ST.fbOK && ST.fbDb) {
+        await ST.fbDb.ref('scenarios').push(data);
+      } else {
+        const r = await fetch(`${CFG.fbDefaultUrl}/scenarios.json`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data)
+        });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+      }
+      toast(`✅ Escenario "${name}" guardado`);
+      if (inp) inp.value = '';
+      await _cargarEscenarios();
+    } catch (e) {
+      console.error('simGuardar:', e);
+      toast('⚠️ No se pudo guardar el escenario');
+    }
+  }
+
+  async function _cargarEscenarios() {
+    try {
+      const r = await fetch(`${CFG.fbDefaultUrl}/scenarios.json`);
+      _scenarios = (r.ok ? await r.json() : null) || {};
+    } catch (_) { _scenarios = {}; }
+    _renderEscenarios();
+  }
+
+  function _renderEscenarios() {
+    const box = document.getElementById('sim-saved');
+    if (!box) return;
+    const items = Object.entries(_scenarios).sort((a, b) => (b[1].ts || 0) - (a[1].ts || 0));
+    if (!items.length) { box.innerHTML = ''; return; }
+    box.innerHTML = `
+      <div class="slabel">ESCENARIOS GUARDADOS</div>
+      ${items.map(([id, s]) => `
+        <div class="card" style="padding:11px 14px;">
+          <div class="flex" style="align-items:center;gap:10px;">
+            <div class="flex1">
+              <div class="tsm fbold">${esc(s.name || '')}</div>
+              <div class="txs tmuted">${(s.players || []).length} jugadores · ${esc(s.createdBy || '')}</div>
+            </div>
+            <button class="btn btn-o btn-sm" onclick="simCargar('${id}')">Cargar</button>
+            <button class="padmin-btn del" onclick="simBorrar('${id}')" title="Eliminar">🗑</button>
+          </div>
+        </div>`).join('')}`;
+  }
+
+  function simCargar(id) {
+    const s = _scenarios[id];
+    if (!s) return;
+    _simSel = (s.players || []).filter(n => ST.lbf.some(p => p.name === n && p.active));
+    _simResults = [];
+    renderParejas();
+    toast(`Cargado: ${s.name}`);
+  }
+
+  async function simBorrar(id) {
+    const s = _scenarios[id];
+    if (!confirm(`¿Eliminar el escenario "${s?.name || ''}"?`)) return;
+    try {
+      if (ST.fbOK && ST.fbDb) await ST.fbDb.ref(`scenarios/${id}`).remove();
+      else {
+        const r = await fetch(`${CFG.fbDefaultUrl}/scenarios/${id}.json`, { method: 'DELETE' });
+        if (!r.ok && r.status !== 404) throw new Error('HTTP ' + r.status);
+      }
+      delete _scenarios[id];
+      _renderEscenarios();
+      toast('🗑 Escenario eliminado');
+    } catch (e) {
+      console.error('simBorrar:', e);
+      toast('⚠️ No se pudo eliminar');
+    }
   }
 
   async function lockFormation(idx) {
@@ -3128,7 +3357,7 @@
     if (tab==='fixture')                               updateRefreshLabel();
     if (tab==='galeria')                               renderGallery();
     if (tab==='asistencia')                            renderAtt();
-    if (tab==='parejas')                               renderParejas();
+    if (tab==='parejas') { renderParejas(); if (ST.isAdmin && !_escCargados) { _escCargados = true; _cargarEscenarios(); } }
     if (tab==='rendimientos' && !ST.perfLoaded)        renderRend();
     if (tab==='lbf') { _historyLoaded = false; _feeCardLoaded = false; renderLBF(); if(ST.isAdmin && ST.fbDb) renderAdmin(); updateInstallCard(); }
     if (tab==='chat') {
@@ -3513,7 +3742,7 @@
     document.body.appendChild(panel);
     const out = document.getElementById('dbg-out');
     const info = {
-      appVersion: 'v50',
+      appVersion: 'v51',
       installPromptReady: !!_installPrompt,
       fbOK: ST?.fbOK,
       player: ST?.player,
