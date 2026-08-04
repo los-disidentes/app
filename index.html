@@ -1275,8 +1275,8 @@
     try {
       const r = await fetch(`${BASE}/lbf.json`);
       if (r.ok) {
-        const data = await r.json();
-        if (data && Array.isArray(data)) {
+        const data = _toArr(await r.json());
+        if (data.length) {
           ST.lbf = data;
           localStorage.setItem('lbf', JSON.stringify(data));
           updateLBFDatalist();
@@ -1711,8 +1711,8 @@
 
         // BUG-05: Migrar LBF — actualizar el nombre en el array
         const lbfSnap = await ST.fbDb.ref('lbf').once('value');
-        const lbfArr = lbfSnap.val();
-        if (Array.isArray(lbfArr)) {
+        const lbfArr = _toArr(lbfSnap.val());
+        if (lbfArr.length) {
           const updatedLbf = lbfArr.map(p => normalizeName(p.name||'') === normalizeName(ST.player) ? {...p, name: newName} : p);
           await ST.fbDb.ref('lbf').set(updatedLbf);
           ST.lbf = updatedLbf;
@@ -1819,8 +1819,8 @@
         renderOnline();
       });
       ST.fbDb.ref('lbf').on('value', s => {
-        const d = s.val();
-        if (d && Array.isArray(d)) {
+        const d = _toArr(s.val());
+        if (d.length) {
           ST.lbf = d;
           localStorage.setItem('lbf', JSON.stringify(d));
           updateLBFDatalist();
@@ -3076,15 +3076,38 @@
   }
   // ──────────────────────────────────────────────────────────────
 
-  function saveLBF(){
+  // Firebase NO guarda arrays: guarda objetos con claves numéricas. Solo devuelve
+  // un array de JS si las claves son 0,1,2…n sin huecos. Con un solo hueco (por
+  // ejemplo al borrar un jugador del medio) devuelve {"0":…,"2":…} y el código que
+  // exigía Array.isArray() lo descartaba: la LBF quedaba vacía sin ningún error.
+  function _toArr(d){
+    if (!d) return [];
+    if (Array.isArray(d)) return d.filter(Boolean);
+    if (typeof d === 'object') {
+      return Object.keys(d)
+        .sort((a,b) => (parseInt(a,10)||0) - (parseInt(b,10)||0))
+        .map(k => d[k])
+        .filter(Boolean);
+    }
+    return [];
+  }
+
+  async function saveLBF(){
     localStorage.setItem('lbf', JSON.stringify(ST.lbf));
-    if (ST.fbOK) {
-      ST.fbDb.ref('lbf').set(ST.lbf);
-    } else {
-      // REST fallback — PUT sin WebSocket
-      fetch(`${CFG.fbDefaultUrl}/lbf.json`, {
-        method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(ST.lbf)
-      }).catch(e => console.warn('saveLBF REST failed:', e));
+    // Antes esto fallaba en silencio: la lista quedaba solo en este dispositivo
+    // y el resto del equipo no la veía nunca.
+    try {
+      if (ST.fbOK) {
+        await ST.fbDb.ref('lbf').set(ST.lbf);
+      } else {
+        const r = await fetch(`${CFG.fbDefaultUrl}/lbf.json`, {
+          method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(ST.lbf)
+        });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+      }
+    } catch(e) {
+      console.error('saveLBF error:', e);
+      toast('⚠️ No se pudo sincronizar la lista. Quedó guardada solo en este dispositivo.', 4000);
     }
   }
 
@@ -3490,7 +3513,7 @@
     document.body.appendChild(panel);
     const out = document.getElementById('dbg-out');
     const info = {
-      appVersion: 'v49',
+      appVersion: 'v50',
       installPromptReady: !!_installPrompt,
       fbOK: ST?.fbOK,
       player: ST?.player,
