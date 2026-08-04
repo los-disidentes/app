@@ -1902,14 +1902,24 @@
     return null;
   }
 
+  // AbortSignal.timeout() no existe en Safari < 16. Sin este fallback, apiGet tira
+  // TypeError en los 3 intentos y la pantalla se queda "Cargando…" para siempre.
+  function _timeoutSignal(ms) {
+    try { if (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) return AbortSignal.timeout(ms); } catch(_) {}
+    try { const c = new AbortController(); setTimeout(() => c.abort(), ms); return c.signal; } catch(_) {}
+    return undefined;
+  }
+
   async function apiGet(path) {
     const url = CFG.ligaBase + path;
 
-    // 1. Archivos locales cacheados por GitHub Actions (actualiza cada 2h, sin CORS)
+    // 1. Archivos locales cacheados por GitHub Actions (sin CORS).
+    // Cache-bust + no-store: evita que un service worker viejo sirva la copia
+    // vieja del archivo (que era null) y deje la app sin datos.
     const localPath = _ligaLocalPath(path);
     if (localPath) {
       try {
-        const r = await fetch(localPath, { signal: AbortSignal.timeout(3000) });
+        const r = await fetch(`${localPath}?t=${Date.now()}`, { cache: 'no-store', signal: _timeoutSignal(6000) });
         if (r.ok) {
           const data = await r.json();
           // null o [] → datos iniciales vacíos → seguir al proxy
@@ -1920,13 +1930,13 @@
 
     // 2. CORS proxy como fallback
     try {
-      const r = await fetch(CFG.corsProxy + encodeURIComponent(url), { signal: AbortSignal.timeout(6000) });
+      const r = await fetch(CFG.corsProxy + encodeURIComponent(url), { signal: _timeoutSignal(6000) });
       return JSON.parse(await r.text());
     } catch(_) {}
 
     // 3. Directo (funciona si el navegador tiene CORS permisivo)
     try {
-      const r = await fetch(url, { signal: AbortSignal.timeout(4000) });
+      const r = await fetch(url, { signal: _timeoutSignal(4000) });
       return await r.json();
     } catch(e) { console.warn('API off:', path); return null; }
   }
@@ -1939,7 +1949,15 @@
 
   async function loadFixture() {
     const data = await apiGet(`/api/fixture_mod.php?NroCampeonato=${CFG.campId}`);
-    if (!data) { if (ST.fixture.length) renderFixture(); return; }
+    if (!data) {
+      // Nunca dejar el spinner girando: si no hay nada cacheado, avisar y ofrecer reintento
+      if (ST.fixture.length) renderFixture();
+      else {
+        const w = document.getElementById('next-match-wrap');
+        if (w) w.innerHTML = '<div class="empty"><div class="ei">📡</div><h3>No pudimos cargar el fixture</h3><p>Chequeá tu conexión y tocá «Actualizar datos» abajo.</p></div>';
+      }
+      return;
+    }
     const matches = [];
     data.forEach(fecha => {
       (fecha.partidos || []).forEach(p => {
@@ -1964,7 +1982,14 @@
 
   async function loadStandings() {
     const data = await apiGet(`/api/tabla_posiciones.php?NroCampeonato=${CFG.campId}`);
-    if (!data) { if (ST.standings.length) renderStandings(); return; }
+    if (!data) {
+      if (ST.standings.length) renderStandings();
+      else {
+        const w = document.getElementById('standings-wrap');
+        if (w) w.innerHTML = '<div class="tcenter tmuted tsm" style="padding:10px">No disponible — tocá «Actualizar datos»</div>';
+      }
+      return;
+    }
     ST.standings = data;
     localStorage.setItem('standings', JSON.stringify(data));
     renderStandings();
@@ -3465,7 +3490,7 @@
     document.body.appendChild(panel);
     const out = document.getElementById('dbg-out');
     const info = {
-      appVersion: 'v48',
+      appVersion: 'v49',
       installPromptReady: !!_installPrompt,
       fbOK: ST?.fbOK,
       player: ST?.player,
