@@ -2394,6 +2394,7 @@
   // SIMULADOR DE FORMACIONES (solo admin)
   // ═══════════════════════════════════════════
   let _escCargados = false; // los escenarios se traen una sola vez por sesión
+  let _simSinRanking = false; // true = ignora historial, arma sólo por reglamento
   let _simSel     = [];   // nombres marcados
   let _simResults = [];   // últimas formaciones simuladas
   let _scenarios  = {};   // escenarios guardados en Firebase
@@ -2411,7 +2412,7 @@
   // Explora TODAS las combinaciones de 6 entre los marcados y devuelve las mejores.
   // Art. 19: los presentes se renumeran 1–N por LBF; los 6 que juegan conservan
   // ese número (no se renumeran de nuevo 1–6), que es lo que define las sumas.
-  function simulateFormations(nombres, topN = 8) {
+  function simulateFormations(nombres, topN = 8, sinRanking = false) {
     const pool = ST.lbf
       .filter(p => nombres.includes(p.name))
       .sort((a, b) => (a.lbfPosition || 999) - (b.lbfPosition || 999))
@@ -2430,6 +2431,15 @@
     let todasDelUnico = [];      // sólo se usa si marcaron exactamente 6
 
     combos.forEach(six => {
+      // MODO SIN RANKING: no se consulta el historial. Pareo fijo 1º+2º, 3º+4º,
+      // 5º+6º según el orden de LBF dentro del sexteto — una única formación por
+      // conjunto. Art. 13 igual asigna las canchas por suma (acá ya salen 3-7-11).
+      if (sinRanking) {
+        const s = six.slice().sort((x, y) => x.mn - y.mn);
+        const c = assignCourts([[s[0], s[1]], [s[2], s[3]], [s[4], s[5]]]);
+        mejorPorConjunto.push({ ...c, perf: 0, fuerza: s.reduce((t, p) => t + p.mn, 0) });
+        return;
+      }
       const delConjunto = [];
       // Mismo criterio que getAllPairings: 15 particiones por conjunto, no 30
       const [a, ...rest] = six;
@@ -2451,6 +2461,13 @@
       if (combos.length === 1) todasDelUnico = delConjunto;
       mejorPorConjunto.push(delConjunto[0]);
     });
+
+    // Sin ranking no hay puntaje que ordenar: se ordena por fuerza de LBF
+    // (suma de números más baja = el sexteto mejor rankeado disponible).
+    if (sinRanking) {
+      mejorPorConjunto.sort((x, y) => x.fuerza - y.fuerza);
+      return mejorPorConjunto.slice(0, topN);
+    }
 
     // Con exactamente 6 marcados hay un solo conjunto posible → mostrar los
     // distintos pareos de esos 6.
@@ -2501,6 +2518,14 @@
           <button class="btn btn-o btn-sm" onclick="simLimpiar()">Limpiar</button>
           <button class="btn btn-p btn-sm" onclick="simCorrer()" ${n < 6 ? 'disabled' : ''}>Simular</button>
         </div>
+        <div class="separator" style="margin:12px 0 10px;"></div>
+        <label style="display:flex;align-items:center;gap:9px;cursor:pointer;">
+          <input type="checkbox" ${_simSinRanking ? 'checked' : ''} onchange="simToggleRanking()" style="cursor:pointer;">
+          <span class="txs" style="line-height:1.45;">
+            <strong>No aplicar ranking</strong> — ignora el historial y arma sólo por reglamento:
+            pareo fijo 1+2 / 3+4 / 5+6 y sextetos ordenados por posición de LBF.
+          </span>
+        </label>
       </div>
       <div id="sim-out"></div>
       <div id="sim-saved"></div>
@@ -2514,6 +2539,7 @@
     if (i >= 0) _simSel.splice(i, 1); else _simSel.push(name);
     renderParejas();
   }
+  function simToggleRanking() { _simSinRanking = !_simSinRanking; _simResults = []; renderParejas(); }
   function simTodos()   { _simSel = ST.lbf.filter(p => p.active).map(p => p.name); renderParejas(); }
   function simLimpiar() { _simSel = []; _simResults = []; renderParejas(); }
 
@@ -2523,7 +2549,7 @@
     if (out) out.innerHTML = '<div class="tcenter" style="padding:16px;"><span class="spin"></span><div class="txs tmuted mt8">Calculando…</div></div>';
     setTimeout(() => {
       const t0 = performance.now();
-      _simResults = simulateFormations(_simSel, 8);
+      _simResults = simulateFormations(_simSel, 8, _simSinRanking);
       const ms = Math.round(performance.now() - t0);
       _renderSimResultados(ms);
     }, 30);
@@ -2532,9 +2558,14 @@
     const out = document.getElementById('sim-out');
     if (!out) return;
     if (!_simResults.length) { out.innerHTML = ''; return; }
-    const empatadas = new Set(_simResults.map(f => f.perf)).size === 1;
+    const empatadas = !_simSinRanking && new Set(_simResults.map(f => f.perf)).size === 1;
+    const titulo = _simSinRanking ? 'SEXTETOS POR REGLAMENTO'
+                 : (_simSel.length > 6 ? 'MEJORES SEXTETOS' : 'PAREOS POSIBLES');
     out.innerHTML = `
-      <div class="slabel">${_simSel.length > 6 ? 'MEJORES SEXTETOS' : 'PAREOS POSIBLES'}${ms != null ? ` · ${ms} ms` : ''}</div>
+      <div class="slabel">${titulo}${ms != null ? ` · ${ms} ms` : ''}</div>
+      ${_simSinRanking ? `<div class="card" style="padding:10px 14px;">
+        <div class="txs tmuted" style="line-height:1.5;">📋 Sin ranking: no se mira el historial. Pareo fijo 1+2 / 3+4 / 5+6 y sextetos ordenados de mejor a peor según la LBF.</div>
+      </div>` : ''}
       ${empatadas ? `<div class="card" style="border-color:var(--grape);padding:10px 14px;">
         <div class="txs tmuted" style="line-height:1.5;">⚠️ Todas empatan en puntaje: todavía no hay partidos jugados cargados, así que no hay historial de parejas para comparar. Son formaciones válidas, no un ranking real.</div>
       </div>` : ''}
@@ -3785,7 +3816,7 @@
     document.body.appendChild(panel);
     const out = document.getElementById('dbg-out');
     const info = {
-      appVersion: 'v54',
+      appVersion: 'v55',
       installPromptReady: !!_installPrompt,
       fbOK: ST?.fbOK,
       player: ST?.player,
