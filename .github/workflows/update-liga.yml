@@ -55,15 +55,24 @@ jobs:
           print('Fetching fixture...')
           url = f'{BASE}/api/fixture_mod.php?NroCampeonato={CAMP_ID}'
           data = fetch_url(url)
-          with open('fixture.json', 'w') as f:
-            json.dump(data, f) if data is not None else f.write('null')
+          # NUNCA pisar el archivo si la API no responde: la API vieja de la liga
+          # murio (404) y esto sobreescribia el fixture con 'null' cada 2 horas,
+          # dejando la app sin datos para todos.
+          if data:
+            with open('fixture.json', 'w') as f:
+              json.dump(data, f)
+          else:
+            print('Sin datos de fixture -> conservo fixture.json actual')
 
           # --- standings ---
           print('Fetching standings...')
           url = f'{BASE}/api/tabla_posiciones.php?NroCampeonato={CAMP_ID}'
           data = fetch_url(url)
-          with open('standings.json', 'w') as f:
-            json.dump(data, f) if data is not None else f.write('null')
+          if data:
+            with open('standings.json', 'w') as f:
+              json.dump(data, f)
+          else:
+            print('Sin datos de posiciones -> conservo standings.json actual')
 
           # --- match results ---
           os.makedirs('results', exist_ok=True)
@@ -87,8 +96,9 @@ jobs:
                 print(f'Fetching result {nid}...')
                 url = f'{BASE}/resultadopartidotenis_visita.php?NroPartidoCampeonato={nid}'
                 rdata = fetch_url(url)
-                with open(f'results/{nid}.json', 'w') as f:
-                  json.dump(rdata, f) if rdata is not None else f.write('null')
+                if rdata:
+                  with open(f'results/{nid}.json', 'w') as f:
+                    json.dump(rdata, f)
           PYEOF
 
       - name: Commit si hay cambios
