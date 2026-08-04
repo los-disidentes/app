@@ -2418,8 +2418,12 @@
       .map((p, i) => ({ name: p.name, lbfPos: p.lbfPosition || (i + 1), mn: i + 1 }));
     if (pool.length < 6) return [];
 
-    let best = [];
-    _combinations(pool, 6).forEach(six => {
+    const combos = _combinations(pool, 6);
+    let mejorPorConjunto = [];   // la mejor formación de CADA conjunto de 6
+    let todasDelUnico = [];      // sólo se usa si marcaron exactamente 6
+
+    combos.forEach(six => {
+      const delConjunto = [];
       // Mismo criterio que getAllPairings: 15 particiones por conjunto, no 30
       const [a, ...rest] = six;
       for (let i = 0; i < rest.length; i++) {
@@ -2433,15 +2437,26 @@
             perf += pairPerf(p[0].name, p[1].name);
             perf += (playerPct(p[0].name) + playerPct(p[1].name)) / 200;
           });
-          best.push({ ...c, perf });
+          delConjunto.push({ ...c, perf });
         }
       }
-      // Poda: con 19 jugadores son 27.132 combinaciones × 15 = +400.000 formaciones.
-      // Sin esto se dispara la memoria en el celular.
-      if (best.length > 3000) { best.sort((x, y) => y.perf - x.perf); best.length = topN; }
+      delConjunto.sort((x, y) => y.perf - x.perf);
+      if (combos.length === 1) todasDelUnico = delConjunto;
+      mejorPorConjunto.push(delConjunto[0]);
+      // Poda: con 19 jugadores son 27.132 conjuntos. Sin esto se dispara la memoria.
+      if (mejorPorConjunto.length > 4000) {
+        mejorPorConjunto.sort((x, y) => y.perf - x.perf);
+        mejorPorConjunto.length = topN;
+      }
     });
-    best.sort((x, y) => y.perf - x.perf);
-    return best.slice(0, topN);
+
+    // Con exactamente 6 marcados hay un solo conjunto posible → mostrar los
+    // distintos pareos de esos 6. Con más, mostrar conjuntos DISTINTOS: sin
+    // historial cargado todas las formaciones empatan, y si no separáramos por
+    // conjunto el top entero saldría del primer sexteto generado.
+    if (combos.length === 1) return todasDelUnico.slice(0, topN);
+    mejorPorConjunto.sort((x, y) => y.perf - x.perf);
+    return mejorPorConjunto.slice(0, topN);
   }
 
   function _appendSimulador() {
@@ -2505,8 +2520,12 @@
     const out = document.getElementById('sim-out');
     if (!out) return;
     if (!_simResults.length) { out.innerHTML = ''; return; }
+    const empatadas = new Set(_simResults.map(f => f.perf)).size === 1;
     out.innerHTML = `
-      <div class="slabel">MEJORES FORMACIONES${ms != null ? ` · ${ms} ms` : ''}</div>
+      <div class="slabel">${_simSel.length > 6 ? 'MEJORES SEXTETOS' : 'PAREOS POSIBLES'}${ms != null ? ` · ${ms} ms` : ''}</div>
+      ${empatadas ? `<div class="card" style="border-color:var(--grape);padding:10px 14px;">
+        <div class="txs tmuted" style="line-height:1.5;">⚠️ Todas empatan en puntaje: todavía no hay partidos jugados cargados, así que no hay historial de parejas para comparar. Son formaciones válidas, no un ranking real.</div>
+      </div>` : ''}
       ${_simResults.map((f, idx) => `
         <div class="fcard ${idx === 0 ? 'best' : ''}">
           <div class="${idx === 0 ? 'txs tgreen fbold' : 'txs tmuted'}" style="margin-bottom:8px;">
@@ -2523,6 +2542,13 @@
               <div class="csum">Σ${f[c + 's']}</div>
             </div>`;
           }).join('')}
+          ${(() => {
+            const juegan = ['d1','d2','d3'].flatMap(c => f[c].map(p => p.name));
+            const afuera = _simSel.filter(n => !juegan.includes(n));
+            return afuera.length
+              ? `<div class="txs tmuted" style="margin-top:8px;">Descansan: ${afuera.map(esc).join(' · ')}</div>`
+              : '';
+          })()}
         </div>`).join('')}
       <div class="card">
         <div class="txs tmuted" style="margin-bottom:8px;">Guardar esta selección como escenario</div>
@@ -3747,7 +3773,7 @@
     document.body.appendChild(panel);
     const out = document.getElementById('dbg-out');
     const info = {
-      appVersion: 'v52',
+      appVersion: 'v53',
       installPromptReady: !!_installPrompt,
       fbOK: ST?.fbOK,
       player: ST?.player,
