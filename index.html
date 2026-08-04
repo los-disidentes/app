@@ -593,10 +593,9 @@
         <button class="modal-x" onclick="document.getElementById('modal-fee-payment').classList.add('hidden')">✕</button>
       </div>
 
-      <!-- Monto destacado -->
+      <!-- Destinatario (el monto lo define el link de pago) -->
       <div style="text-align:center;margin-bottom:16px;">
-        <div style="font-family:var(--serif);font-size:2.2rem;font-weight:700;color:var(--green-dk);line-height:1;">$25.000</div>
-        <div style="font-size:0.78rem;color:var(--muted);font-family:var(--sans);margin-top:2px;">para <strong>Alfonso Chala</strong> · fee mensual de capitanía</div>
+        <div style="font-size:0.82rem;color:var(--muted);font-family:var(--sans);">para <strong>Alfonso Chala</strong> · fee mensual de capitanía</div>
       </div>
 
       <!-- Mercado Pago — un toque, sin copiar nada -->
@@ -623,7 +622,6 @@
         <ol style="font-size:0.76rem;color:var(--muted);font-family:var(--sans);line-height:1.7;margin:0;padding-left:16px;">
           <li>Abrí Mercado Pago, Ualá, Naranja X o tu banco</li>
           <li>Tocá <strong>Transferir</strong> → ingresá el CVU</li>
-          <li>Monto: <strong>$25.000</strong></li>
           <li>Concepto (opcional): <em>Fee capitanía</em></li>
         </ol>
       </div>
@@ -3218,7 +3216,6 @@
 
   // ── FEE CAPITANÍA ─────────────────────────────────────────────
   const FEE_CVU    = '0000003100071780662081';
-  const FEE_AMOUNT = 25000;
   let _feeModalPlayer = null;
   let _feeModalMonth  = null;
   let _feeCardLoaded  = false;
@@ -3309,7 +3306,7 @@
           <span style="font-size:0.78rem;font-weight:700;color:var(--green-dk);font-family:var(--sans);white-space:nowrap;">${paid.length}/${total} pagaron</span>
         </div>
         <p style="font-size:0.73rem;color:var(--muted);font-family:var(--sans);margin:0;">
-          Fee mensual $25.000 → Alfonso Chala · ${monthLabel}
+          Fee mensual → Alfonso Chala · ${monthLabel}
         </p>
       </div>
       <div>${rows}</div>
@@ -3823,7 +3820,7 @@
     document.body.appendChild(panel);
     const out = document.getElementById('dbg-out');
     const info = {
-      appVersion: 'v56',
+      appVersion: 'v57',
       installPromptReady: !!_installPrompt,
       fbOK: ST?.fbOK,
       player: ST?.player,
