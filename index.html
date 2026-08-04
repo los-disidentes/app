@@ -2056,16 +2056,21 @@
   // ═══════════════════════════════════════════
   // PAIRS ENGINE — Art. 13 + Art. 19
   // ═══════════════════════════════════════════
+  // Particiones de 6 jugadores en 3 parejas. Son 15 — 6!/(2³·3!) — no 30.
+  // Antes se recorrían todos los pares {j,k} de los 4 restantes: elegir {A,B} deja
+  // {C,D} para la tercera, y elegir {C,D} deja {A,B} → la MISMA formación contada
+  // dos veces. Eso duplicaba cada opción sugerida (de 5 sugerencias, 2 o 3 eran
+  // repetidas). Fijando el primer restante en la pareja 2, cada partición sale una vez.
   function getAllPairings(players) {
     if (players.length < 6) return [];
     const p6=[...players.slice(0,6)], res=[], [a,...rest]=p6;
     for(let i=0;i<rest.length;i++){
       const pair1=[a,rest[i]], rem=rest.filter((_,j)=>j!==i);
-      for(let j=0;j<rem.length-1;j++)
-        for(let k=j+1;k<rem.length;k++){
-          const pair2=[rem[j],rem[k]], pair3=rem.filter((_,x)=>x!==j&&x!==k);
-          res.push([pair1,pair2,pair3]);
-        }
+      const b=rem[0], resto=rem.slice(1);
+      for(let j=0;j<resto.length;j++){
+        const pair2=[b,resto[j]], pair3=resto.filter((_,x)=>x!==j);
+        res.push([pair1,pair2,pair3]);
+      }
     }
     return res;
   }
@@ -2415,20 +2420,20 @@
 
     let best = [];
     _combinations(pool, 6).forEach(six => {
+      // Mismo criterio que getAllPairings: 15 particiones por conjunto, no 30
       const [a, ...rest] = six;
       for (let i = 0; i < rest.length; i++) {
         const pair1 = [a, rest[i]], rem = rest.filter((_, j) => j !== i);
-        for (let j = 0; j < rem.length - 1; j++) {
-          for (let k = j + 1; k < rem.length; k++) {
-            const pair2 = [rem[j], rem[k]], pair3 = rem.filter((_, x) => x !== j && x !== k);
-            const c = assignCourts([pair1, pair2, pair3]);
-            let perf = 0;
-            [c.d1, c.d2, c.d3].forEach(p => {
-              perf += pairPerf(p[0].name, p[1].name);
-              perf += (playerPct(p[0].name) + playerPct(p[1].name)) / 200;
-            });
-            best.push({ ...c, perf });
-          }
+        const b = rem[0], resto = rem.slice(1);
+        for (let j = 0; j < resto.length; j++) {
+          const pair2 = [b, resto[j]], pair3 = resto.filter((_, x) => x !== j);
+          const c = assignCourts([pair1, pair2, pair3]);
+          let perf = 0;
+          [c.d1, c.d2, c.d3].forEach(p => {
+            perf += pairPerf(p[0].name, p[1].name);
+            perf += (playerPct(p[0].name) + playerPct(p[1].name)) / 200;
+          });
+          best.push({ ...c, perf });
         }
       }
       // Poda: con 19 jugadores son 27.132 combinaciones × 15 = +400.000 formaciones.
@@ -3742,7 +3747,7 @@
     document.body.appendChild(panel);
     const out = document.getElementById('dbg-out');
     const info = {
-      appVersion: 'v51',
+      appVersion: 'v52',
       installPromptReady: !!_installPrompt,
       fbOK: ST?.fbOK,
       player: ST?.player,
