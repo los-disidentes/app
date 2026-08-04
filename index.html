@@ -2418,7 +2418,14 @@
       .map((p, i) => ({ name: p.name, lbfPos: p.lbfPosition || (i + 1), mn: i + 1 }));
     if (pool.length < 6) return [];
 
-    const combos = _combinations(pool, 6);
+    let combos = _combinations(pool, 6);
+    // Cota de memoria: C(N,6) explota rápido (19 jugadores = 27.132, 25 = 177.100).
+    // Si son demasiados, evaluamos una muestra repartida en vez de todos.
+    const MAX_CONJUNTOS = 20000;
+    if (combos.length > MAX_CONJUNTOS) {
+      const paso = combos.length / MAX_CONJUNTOS;
+      combos = Array.from({ length: MAX_CONJUNTOS }, (_, i) => combos[Math.floor(i * paso)]);
+    }
     let mejorPorConjunto = [];   // la mejor formación de CADA conjunto de 6
     let todasDelUnico = [];      // sólo se usa si marcaron exactamente 6
 
@@ -2443,19 +2450,24 @@
       delConjunto.sort((x, y) => y.perf - x.perf);
       if (combos.length === 1) todasDelUnico = delConjunto;
       mejorPorConjunto.push(delConjunto[0]);
-      // Poda: con 19 jugadores son 27.132 conjuntos. Sin esto se dispara la memoria.
-      if (mejorPorConjunto.length > 4000) {
-        mejorPorConjunto.sort((x, y) => y.perf - x.perf);
-        mejorPorConjunto.length = topN;
-      }
     });
 
     // Con exactamente 6 marcados hay un solo conjunto posible → mostrar los
-    // distintos pareos de esos 6. Con más, mostrar conjuntos DISTINTOS: sin
-    // historial cargado todas las formaciones empatan, y si no separáramos por
-    // conjunto el top entero saldría del primer sexteto generado.
+    // distintos pareos de esos 6.
     if (combos.length === 1) return todasDelUnico.slice(0, topN);
+
     mejorPorConjunto.sort((x, y) => y.perf - x.perf);
+
+    // Si el tope está empatado (pasa siempre mientras no haya partidos jugados),
+    // NO tomar los primeros N: se generan en orden lexicográfico y todos comparten
+    // el prefijo {1,2,3,4,5}, así que los últimos de la lista no aparecían nunca.
+    // Tomamos una muestra repartida para que todos los marcados tengan chance.
+    const mejorPerf = mejorPorConjunto[0].perf;
+    const empatadas = mejorPorConjunto.filter(f => f.perf === mejorPerf);
+    if (empatadas.length > topN) {
+      const paso = empatadas.length / topN;
+      return Array.from({ length: topN }, (_, i) => empatadas[Math.floor(i * paso)]);
+    }
     return mejorPorConjunto.slice(0, topN);
   }
 
@@ -3773,7 +3785,7 @@
     document.body.appendChild(panel);
     const out = document.getElementById('dbg-out');
     const info = {
-      appVersion: 'v53',
+      appVersion: 'v54',
       installPromptReady: !!_installPrompt,
       fbOK: ST?.fbOK,
       player: ST?.player,
