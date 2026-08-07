@@ -2575,21 +2575,43 @@
     }
   }
 
-  // Publica la formación confirmada como novedad. Se llama desde Parejas.
-  async function publicarFormacionEnNovedades() {
-    if (!ST.isAdmin) { toast('Solo el admin puede publicar'); return; }
-    const nm = nextMatch();
-    const f  = ST.formation;
-    if (!f || !f.locked) { toast('Primero confirmá una formación'); return; }
+  // Firma de una formación: sirve para no publicar dos veces lo mismo.
+  function _firmaFormacion(f) {
+    return ['d1','d2','d3']
+      .map(c => (f[c] || []).map(p => (typeof p === 'string' ? p : p.name)).slice().sort().join('+'))
+      .join('|');
+  }
+
+  // Publica la formación confirmada como novedad.
+  // Manual (botón): publica siempre — sirve para republicar tras un cambio.
+  // Automático (al confirmar): omite si ya se publicó esa misma formación
+  // para esa misma fecha, así confirmar/desbloquear/reconfirmar no spamea.
+  async function publicarFormacionEnNovedades(opts = {}) {
+    const auto = !!opts.auto;
+    if (!ST.isAdmin) { if (!auto) toast('Solo el admin puede publicar'); return; }
+    const nm = opts.nm || nextMatch();
+    const f  = opts.data || ST.formation;
+    if (!f || !f.locked) { if (!auto) toast('Primero confirmá una formación'); return; }
+
+    const matchId = nm ? String(nm.id) : '';
+    const firma   = _firmaFormacion(f);
+    if (auto && _newsOrdenadas().some(([, n]) =>
+          n.tipo === 'formacion' && n.formacion &&
+          String(n.formacion.matchId || '') === matchId &&
+          _firmaFormacion(n.formacion) === firma)) {
+      return;   // ya estaba publicada, no duplicar
+    }
+
     const data = {
       titulo: `Formación confirmada${nm ? ' · Fecha ' + nm.rueda : ''}`,
       cuerpo: '',
       tipo: 'formacion',
       formacion: {
-        d1: (f.d1 || []).map(p => p.name), d1s: f.d1s ?? null,
-        d2: (f.d2 || []).map(p => p.name), d2s: f.d2s ?? null,
-        d3: (f.d3 || []).map(p => p.name), d3s: f.d3s ?? null,
+        d1: (f.d1 || []).map(p => (typeof p === 'string' ? p : p.name)), d1s: f.d1s ?? null,
+        d2: (f.d2 || []).map(p => (typeof p === 'string' ? p : p.name)), d2s: f.d2s ?? null,
+        d3: (f.d3 || []).map(p => (typeof p === 'string' ? p : p.name)), d3s: f.d3s ?? null,
         rival: nm ? rival(nm) : '',
+        matchId,
       },
       autor: ST.player || '—',
       ts: Date.now(),
@@ -2601,7 +2623,8 @@
       toast('📣 Formación publicada en Novedades');
     } catch (e) {
       console.error('publicarFormacion:', e);
-      toast('⚠️ No se pudo publicar');
+      if (!auto) toast('⚠️ No se pudo publicar');
+      throw e;
     }
   }
 
@@ -2906,15 +2929,50 @@
       d3:f.d3.map(p=>({name:p.name})),d3s:f.d3s,
       locked:true, lockedBy:ST.player, lockedAt:Date.now()
     };
-    if(ST.fbDb) await ST.fbDb.ref(`formation/${nm.id}`).set(data);
-    else{ST.formation=data;renderParejas();}
+    // Antes chequeaba ST.fbDb (que el objeto exista) en vez de ST.fbOK (que el
+    // WebSocket esté conectado): sin WebSocket el SDK encola el write y el await
+    // colgaba para siempre. Mismo bug que tenían las operaciones de admin.
+    try {
+      if (ST.fbOK && ST.fbDb) {
+        await ST.fbDb.ref(`formation/${nm.id}`).set(data);
+      } else {
+        const r = await fetch(`${CFG.fbDefaultUrl}/formation/${encodeURIComponent(nm.id)}.json`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data)
+        });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        ST.formation = data;
+        renderParejas();
+      }
+    } catch(e) {
+      console.error('lockFormation:', e);
+      toast('⚠️ No se pudo confirmar la formación. Probá de nuevo.');
+      return;   // si no se confirmó, no se publica nada
+    }
     toast('🔒 ¡Formación confirmada! Jugamos juntos 🎾');
+    // Publicar en Novedades. Va después del bloqueo y aislado: si esto falla,
+    // la formación ya quedó confirmada igual. Le pasamos los datos explícitos
+    // porque con WebSocket ST.formation todavía no reflejó el cambio.
+    try { await publicarFormacionEnNovedades({ auto: true, data, nm }); }
+    catch(e) { console.error('auto-publicar formación:', e); }
   }
 
   async function unlockFormation() {
     const nm=nextMatch(); if(!nm) return;
-    if(ST.fbDb) await ST.fbDb.ref(`formation/${nm.id}/locked`).set(false);
-    else{if(ST.formation) ST.formation.locked=false; renderParejas();}
+    try {
+      if (ST.fbOK && ST.fbDb) {
+        await ST.fbDb.ref(`formation/${nm.id}/locked`).set(false);
+      } else {
+        const r = await fetch(`${CFG.fbDefaultUrl}/formation/${encodeURIComponent(nm.id)}/locked.json`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: 'false'
+        });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        if (ST.formation) ST.formation.locked = false;
+        renderParejas();
+      }
+    } catch(e) {
+      console.error('unlockFormation:', e);
+      toast('⚠️ No se pudo desbloquear. Probá de nuevo.');
+    }
   }
 
   // ═══════════════════════════════════════════
@@ -3146,7 +3204,15 @@
   async function unlockLBF() {
     if (!ST.isAdmin) return;
     if (!confirm('¿Reabrir la LBF para editar el orden?\nPodés volver a cerrarla cuando termines.')) return;
-    if (ST.fbDb) await ST.fbDb.ref('config/lbfLocked').set(false);
+    try {
+      if (ST.fbOK && ST.fbDb) await ST.fbDb.ref('config/lbfLocked').set(false);
+      else {
+        const r = await fetch(`${CFG.fbDefaultUrl}/config/lbfLocked.json`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: 'false'
+        });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+      }
+    } catch(e) { console.error('unlockLBF:', e); toast('⚠️ No se pudo reabrir la LBF'); return; }
     ST.lbfLocked = false;
     localStorage.setItem('lbfLocked', 'false');
     toast('🔓 LBF abierta — podés editar el orden');
@@ -3888,7 +3954,15 @@
   async function saveLightboxCaption(key) {
     const inp = document.getElementById('lb-caption-inp');
     const caption = inp?.value?.trim() || '';
-    if (ST.fbDb) await ST.fbDb.ref(`gallery/${key}/caption`).set(caption);
+    try {
+      if (ST.fbOK && ST.fbDb) await ST.fbDb.ref(`gallery/${key}/caption`).set(caption);
+      else {
+        const r = await fetch(`${CFG.fbDefaultUrl}/gallery/${key}/caption.json`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(caption)
+        });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+      }
+    } catch(e) { console.error('saveLightboxCaption:', e); toast('⚠️ No se pudo guardar'); return; }
     _galleryItems[key].caption = caption;
     document.getElementById('lb-caption').textContent = caption;
     toast('✅ Descripción guardada');
@@ -3907,7 +3981,13 @@
       toast('Solo podés borrar tus propias fotos'); return;
     }
     if (!confirm('¿Eliminar esta foto?')) return;
-    if (ST.fbDb) await ST.fbDb.ref(`gallery/${key}`).remove();
+    try {
+      if (ST.fbOK && ST.fbDb) await ST.fbDb.ref(`gallery/${key}`).remove();
+      else {
+        const r = await fetch(`${CFG.fbDefaultUrl}/gallery/${key}.json`, { method: 'DELETE' });
+        if (!r.ok && r.status !== 404) throw new Error('HTTP ' + r.status);
+      }
+    } catch(e) { console.error('deleteFoto:', e); toast('⚠️ No se pudo eliminar la foto'); return; }
     delete _galleryItems[key];
     closeLightbox();
     renderGallery();
@@ -4030,7 +4110,7 @@
     document.body.appendChild(panel);
     const out = document.getElementById('dbg-out');
     const info = {
-      appVersion: 'v58',
+      appVersion: 'v59',
       installPromptReady: !!_installPrompt,
       fbOK: ST?.fbOK,
       player: ST?.player,
