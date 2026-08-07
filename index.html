@@ -653,7 +653,7 @@
 
   <!-- NAV -->
   <nav class="nav">
-    <button class="nav-btn active" data-tab="fixture"      onclick="switchTab('fixture')">      <span class="ni">📅</span>Fixture</button>
+    <button class="nav-btn active" data-tab="fixture"      onclick="switchTab('fixture')">      <span class="ni">📅</span>Fixture<span class="nbadge hidden" id="badge-news">0</span></button>
     <button class="nav-btn"        data-tab="asistencia"   onclick="switchTab('asistencia')">   <span class="ni">✋</span>Asistencia<span class="nbadge hidden" id="badge-att">!</span></button>
     <button class="nav-btn"        data-tab="parejas"      onclick="switchTab('parejas')">      <span class="ni">🎾</span>Parejas</button>
     <button class="nav-btn"        data-tab="chat"         onclick="switchTab('chat')">         <span class="ni">💬</span>Chat<span class="nbadge hidden" id="badge-chat">0</span></button>
@@ -669,6 +669,8 @@
 
   <!-- FIXTURE -->
   <section id="tab-fixture" class="tab active">
+    <!-- Novedades: contenedor propio, independiente de renderFixture() -->
+    <div id="news-wrap"></div>
     <div id="next-match-wrap"><div class="tcenter" style="padding:28px"><span class="spin"></span></div></div>
     <div class="slabel">TABLA DE POSICIONES</div>
     <div class="card" id="standings-wrap"><div class="tcenter tmuted tsm" style="padding:10px">Cargando…</div></div>
@@ -1348,6 +1350,12 @@
       } catch(_) {}
     }
 
+    // Novedades por REST (sin WebSocket no llega el listener)
+    try {
+      const r = await fetch(`${BASE}/news.json?orderBy=%22%24key%22&limitToLast=30`);
+      if (r.ok) { _news = (await r.json()) || {}; renderNews(); }
+    } catch(_) {}
+
     // Datos cargados via REST — punto ámbar + arrancar polling si no hay WebSocket
     if (!ST.fbOK) {
       const dot = document.getElementById('sdot');
@@ -1833,6 +1841,10 @@
           if (ST.activeTab === 'asistencia') renderAtt();
           if (ST.activeTab === 'parejas')    renderParejas();
         }
+      });
+      ST.fbDb.ref('news').limitToLast(30).on('value', s => {
+        _news = s.val() || {};
+        renderNews();
       });
       ST.fbDb.ref('config/lbfLocked').on('value', s => {
         ST.lbfLocked = !!s.val();
@@ -2344,7 +2356,8 @@
               <div class="csum">Σ${f[c+'s']}</div>
             </div>`).join('')}
           <div class="txs tmuted mt8">Confirmada por ${f.lockedBy||'—'}</div>
-          ${ST.isAdmin?`<button class="btn btn-d btn-sm w100 mt8" onclick="unlockFormation()">Desbloquear formación</button>`:''}
+          ${ST.isAdmin?`<button class="btn btn-p btn-sm w100 mt8" onclick="publicarFormacionEnNovedades()">📣 Publicar en Novedades</button>
+          <button class="btn btn-d btn-sm w100 mt8" onclick="unlockFormation()">Desbloquear formación</button>`:''}
         </div>`;
       return;
     }
@@ -2393,6 +2406,203 @@
       </div>
     `;
     wrap._formations = formations;
+  }
+
+  // ═══════════════════════════════════════════
+  // NOVEDADES
+  // Vive en un contenedor propio (#news-wrap) arriba del Fixture. No toca
+  // renderFixture(): si esto falla, el resto de la pantalla sigue funcionando.
+  // ═══════════════════════════════════════════
+  const NEWS_MAX_TITULO = 80;
+  const NEWS_MAX_CUERPO = 1200;
+  let _news = {};            // { id: {titulo, cuerpo, tipo, formacion, autor, ts} }
+  let _newsFormAbierto = false;
+  let _newsVerTodas = false;
+
+  function _newsOrdenadas() {
+    return Object.entries(_news)
+      .filter(([, n]) => n && typeof n === 'object' && n.titulo)
+      .sort((a, b) => (b[1].ts || 0) - (a[1].ts || 0));
+  }
+
+  function updateNewsBadge() {
+    const b = document.getElementById('badge-news');
+    if (!b) return;
+    if (ST.activeTab === 'fixture') { b.classList.add('hidden'); return; }
+    const visto = parseInt(localStorage.getItem('lastNewsSeen') || '0');
+    const n = _newsOrdenadas().filter(([, x]) => (x.ts || 0) > visto && x.autor !== ST.player).length;
+    if (n > 0) { b.textContent = n > 9 ? '9+' : n; b.classList.remove('hidden'); }
+    else       { b.classList.add('hidden'); }
+  }
+
+  function _newsMarcarLeidas() {
+    const items = _newsOrdenadas();
+    if (items.length) localStorage.setItem('lastNewsSeen', String(items[0][1].ts || Date.now()));
+    updateNewsBadge();
+  }
+
+  function fmtHace(ts) {
+    const m = Math.floor((Date.now() - ts) / 60000);
+    if (m < 1)  return 'recién';
+    if (m < 60) return `hace ${m} min`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `hace ${h} h`;
+    const d = Math.floor(h / 24);
+    if (d === 1) return 'ayer';
+    if (d < 30) return `hace ${d} días`;
+    return fmtDateFull(ts);
+  }
+
+  function renderNews() {
+    const wrap = document.getElementById('news-wrap');
+    if (!wrap) return;
+    try {
+      const items = _newsOrdenadas();
+      const visibles = _newsVerTodas ? items : items.slice(0, 3);
+
+      const compositor = ST.isAdmin ? (_newsFormAbierto ? `
+        <div class="card" style="border-color:var(--bordo);">
+          <div class="card-title">📣 Nueva novedad</div>
+          <input id="news-titulo" placeholder="Título — ej: Formación de la fecha 3" maxlength="${NEWS_MAX_TITULO}"
+            style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;font-family:var(--sans);font-size:.9rem;margin-bottom:8px;box-sizing:border-box;">
+          <textarea id="news-cuerpo" placeholder="Escribí acá el detalle…" rows="4" maxlength="${NEWS_MAX_CUERPO}"
+            style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;font-family:var(--sans);font-size:.88rem;line-height:1.5;resize:vertical;box-sizing:border-box;"></textarea>
+          <div class="flex" style="gap:8px;margin-top:10px;">
+            <button class="btn btn-o btn-sm flex1" onclick="newsCerrarForm()">Cancelar</button>
+            <button class="btn btn-p btn-sm flex1" onclick="newsPublicar()">Publicar</button>
+          </div>
+        </div>` : `
+        <button class="btn btn-o btn-sm w100" onclick="newsAbrirForm()" style="margin-bottom:12px;">＋ Publicar una novedad</button>`) : '';
+
+      if (!items.length) {
+        wrap.innerHTML = compositor + (ST.isAdmin ? '' :
+          '<div class="card"><div class="txs tmuted tcenter" style="padding:6px;">Todavía no hay novedades.</div></div>');
+        updateNewsBadge();
+        return;
+      }
+
+      wrap.innerHTML = `
+        <div class="slabel">📣 NOVEDADES</div>
+        ${compositor}
+        ${visibles.map(([id, n]) => {
+          const esForm = n.tipo === 'formacion' && n.formacion;
+          const f = n.formacion || {};
+          return `<div class="card" style="${esForm ? 'border-color:var(--green);' : ''}">
+            <div class="flex" style="align-items:flex-start;gap:8px;">
+              <div class="flex1">
+                <div class="tsm fbold" style="color:var(--green-dk);">${esc(n.titulo || '')}</div>
+                <div class="txs tmuted" style="margin-top:2px;">${esc(n.autor || '—')} · ${fmtHace(n.ts || Date.now())}</div>
+              </div>
+              ${ST.isAdmin ? `<button class="padmin-btn del" onclick="newsBorrar('${id}')" title="Eliminar">🗑</button>` : ''}
+            </div>
+            ${n.cuerpo ? `<div class="tsm" style="margin-top:9px;line-height:1.55;white-space:pre-wrap;">${esc(n.cuerpo)}</div>` : ''}
+            ${esForm ? `<div style="margin-top:10px;">
+              ${['d1','d2','d3'].map(c => {
+                const par = Array.isArray(f[c]) ? f[c] : [];
+                return `<div class="crow">
+                  <div class="clabel ${c}">${c.toUpperCase()}</div>
+                  <div class="cplayers flex1"><strong>${esc(par[0] || '')}</strong> · <strong>${esc(par[1] || '')}</strong></div>
+                  ${f[c + 's'] != null ? `<div class="csum">Σ${f[c + 's']}</div>` : ''}
+                </div>`;
+              }).join('')}
+              ${f.rival ? `<div class="txs tmuted" style="margin-top:7px;">vs ${esc(f.rival)}</div>` : ''}
+            </div>` : ''}
+          </div>`;
+        }).join('')}
+        ${items.length > 3 ? `<button class="btn btn-o btn-sm w100" onclick="newsVerTodas()" style="margin-bottom:14px;">
+          ${_newsVerTodas ? 'Ver menos' : `Ver las ${items.length} novedades`}</button>` : ''}
+        <div class="separator" style="margin:4px 0 16px;"></div>`;
+      updateNewsBadge();
+    } catch (e) {
+      // Nunca dejar el inicio en blanco por una novedad rota
+      console.error('renderNews:', e);
+      wrap.innerHTML = '';
+    }
+  }
+
+  function newsAbrirForm()  { _newsFormAbierto = true;  renderNews(); setTimeout(() => document.getElementById('news-titulo')?.focus(), 60); }
+  function newsCerrarForm() { _newsFormAbierto = false; renderNews(); }
+  function newsVerTodas()   { _newsVerTodas = !_newsVerTodas; renderNews(); }
+
+  async function _newsGuardar(data) {
+    if (ST.fbOK && ST.fbDb) {
+      await ST.fbDb.ref('news').push(data);
+    } else {
+      const r = await fetch(`${CFG.fbDefaultUrl}/news.json`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data)
+      });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const { name: id } = await r.json();
+      _news[id] = data;           // sin WebSocket no llega el eco: reflejar local
+    }
+  }
+
+  async function newsPublicar() {
+    if (!ST.isAdmin) { toast('Solo el admin puede publicar'); return; }
+    const ti = document.getElementById('news-titulo');
+    const cu = document.getElementById('news-cuerpo');
+    const titulo = (ti?.value || '').trim().slice(0, NEWS_MAX_TITULO);
+    const cuerpo = (cu?.value || '').trim().slice(0, NEWS_MAX_CUERPO);
+    if (!titulo) { toast('Poné un título'); ti?.focus(); return; }
+    try {
+      await _newsGuardar({ titulo, cuerpo, tipo: 'texto', autor: ST.player || '—', ts: Date.now() });
+      _newsFormAbierto = false;
+      _newsMarcarLeidas();
+      renderNews();
+      toast('📣 Novedad publicada');
+    } catch (e) {
+      console.error('newsPublicar:', e);
+      toast('⚠️ No se pudo publicar. Probá de nuevo.');
+    }
+  }
+
+  async function newsBorrar(id) {
+    if (!ST.isAdmin) return;
+    const n = _news[id];
+    if (!confirm(`¿Eliminar la novedad "${n?.titulo || ''}"?`)) return;
+    try {
+      if (ST.fbOK && ST.fbDb) await ST.fbDb.ref(`news/${id}`).remove();
+      else {
+        const r = await fetch(`${CFG.fbDefaultUrl}/news/${id}.json`, { method: 'DELETE' });
+        if (!r.ok && r.status !== 404) throw new Error('HTTP ' + r.status);
+      }
+      delete _news[id];
+      renderNews();
+      toast('🗑 Novedad eliminada');
+    } catch (e) {
+      console.error('newsBorrar:', e);
+      toast('⚠️ No se pudo eliminar');
+    }
+  }
+
+  // Publica la formación confirmada como novedad. Se llama desde Parejas.
+  async function publicarFormacionEnNovedades() {
+    if (!ST.isAdmin) { toast('Solo el admin puede publicar'); return; }
+    const nm = nextMatch();
+    const f  = ST.formation;
+    if (!f || !f.locked) { toast('Primero confirmá una formación'); return; }
+    const data = {
+      titulo: `Formación confirmada${nm ? ' · Fecha ' + nm.rueda : ''}`,
+      cuerpo: '',
+      tipo: 'formacion',
+      formacion: {
+        d1: (f.d1 || []).map(p => p.name), d1s: f.d1s ?? null,
+        d2: (f.d2 || []).map(p => p.name), d2s: f.d2s ?? null,
+        d3: (f.d3 || []).map(p => p.name), d3s: f.d3s ?? null,
+        rival: nm ? rival(nm) : '',
+      },
+      autor: ST.player || '—',
+      ts: Date.now(),
+    };
+    try {
+      await _newsGuardar(data);
+      _newsMarcarLeidas();
+      renderNews();
+      toast('📣 Formación publicada en Novedades');
+    } catch (e) {
+      console.error('publicarFormacion:', e);
+      toast('⚠️ No se pudo publicar');
+    }
   }
 
   // ═══════════════════════════════════════════
@@ -3432,7 +3642,7 @@
     document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
     document.getElementById(`tab-${tab}`).classList.add('active');
     document.querySelector(`[data-tab="${tab}"]`).classList.add('active');
-    if (tab==='fixture')                               updateRefreshLabel();
+    if (tab==='fixture') { updateRefreshLabel(); _newsMarcarLeidas(); }
     if (tab==='galeria')                               renderGallery();
     if (tab==='asistencia')                            renderAtt();
     if (tab==='parejas') { renderParejas(); if (ST.isAdmin && !_escCargados) { _escCargados = true; _cargarEscenarios(); } }
@@ -3820,7 +4030,7 @@
     document.body.appendChild(panel);
     const out = document.getElementById('dbg-out');
     const info = {
-      appVersion: 'v57',
+      appVersion: 'v58',
       installPromptReady: !!_installPrompt,
       fbOK: ST?.fbOK,
       player: ST?.player,
