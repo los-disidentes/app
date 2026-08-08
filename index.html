@@ -82,7 +82,6 @@
     /* ── HEADER ─────────────────────────────────── */
     .header {
       background: var(--green-dk);
-      border-bottom: 3px solid var(--green);
       padding: 11px 16px; display: flex; align-items: center; gap: 13px;
       flex-shrink: 0; color: #fff;
     }
@@ -118,11 +117,12 @@
       position: relative; transition: color .2s;
     }
     .nav-btn .ni { font-size: 1.2rem; line-height: 1; }
-    .nav-btn.active { color: var(--green); }
-    .nav-btn.active::after {
-      content: ''; position: absolute; bottom: 0; left: 15%; right: 15%;
-      height: 3px; background: var(--green); border-radius: 3px 3px 0 0;
+    .nav-btn.active { color: var(--green-dk); }
+    .nav-btn.active::before {
+      content: ''; position: absolute; top: 5px; bottom: 5px; left: 4px; right: 4px;
+      background: var(--mint); border-radius: 14px; z-index: -1;
     }
+    .nav-btn { z-index: 0; }
     .nbadge {
       position: absolute; top: 6px; right: 8px;
       background: var(--bordo); color: #fff; border-radius: 10px;
@@ -144,12 +144,33 @@
     .card-title { font-family: var(--serif); font-size: 1rem; font-weight: 700; color: var(--green-dk); margin-bottom: 12px; display: flex; align-items: center; gap: 7px; }
     .slabel { font-size: 0.61rem; text-transform: uppercase; letter-spacing: 1.4px; color: var(--bordo); margin: 14px 0 8px; font-weight: 700; font-family: var(--serif); }
 
+    /* ── LÍNEA DE CAL (firma de marca) ───────────── */
+    .cal-line { height: 6px; background: var(--green); position: relative; flex-shrink: 0; }
+    .cal-line::after { content: ''; position: absolute; top: 2px; left: 0; right: 0; height: 2px; background: #fff; }
+
+    /* ── BLOQUE DE FECHA (día grande + mes bordó) ── */
+    .dblock { min-width: 46px; text-align: center; flex-shrink: 0; }
+    .dblock b { display: block; font-family: var(--serif); font-weight: 700; font-size: 1.15rem; color: var(--ink); line-height: 1; }
+    .dblock i { font-style: normal; font-size: 0.58rem; font-weight: 700; color: var(--bordo); text-transform: uppercase; letter-spacing: 1px; }
+    .dblock.onpaper { background: var(--paper); border-radius: 10px; padding: 8px 10px; min-width: 54px; }
+    .dblock.onpaper b { font-size: 1.5rem; }
+    .card.won { border-left: 3px solid var(--gold); border-radius: 0 var(--r) var(--r) 0; }
+
     /* ── MATCH HERO ──────────────────────────────── */
     .match-hero {
       background: linear-gradient(145deg, var(--green) 0%, var(--green-dk) 65%, #09402A 100%);
-      border-radius: var(--r); padding: 24px 18px; margin-bottom: 14px; color: #fff;
-      text-align: center; position: relative; overflow: hidden; box-shadow: var(--shadow-md);
+      border-radius: var(--r); padding: 0; margin-bottom: 14px; color: #fff;
+      position: relative; overflow: hidden; box-shadow: var(--shadow-md);
     }
+    .mh-top { display: flex; align-items: center; gap: 14px; padding: 18px 16px 14px; text-align: left; }
+    .mh-info { flex: 1; min-width: 0; }
+    .mh-strip { display: flex; border-top: 1px solid rgba(255,255,255,0.15); }
+    .mh-strip > div { flex: 1; text-align: center; padding: 10px 0 9px; }
+    .mh-strip > div + div { border-left: 1px solid rgba(255,255,255,0.15); }
+    .mh-strip b { display: block; font-family: var(--serif); font-weight: 700; font-size: 1.3rem; line-height: 1.1; }
+    .mh-strip small { font-size: 0.56rem; color: rgba(223,243,230,0.8); text-transform: uppercase; letter-spacing: 1.2px; font-weight: 700; }
+    .mh-strip .oro b { color: var(--gold); }
+    .mh-cta { padding: 12px 16px 16px; }
     /* Textura cancha — líneas al 10% */
     .match-hero::before {
       content: ''; position: absolute; inset: 0; pointer-events: none;
@@ -169,6 +190,7 @@
     /* ── RESULT CHIPS ───────────────────────────── */
     .result-chip { font-family: var(--serif); font-weight: 700; font-size: 0.9rem; padding: 4px 14px; border-radius: 50px; letter-spacing: 0.3px; }
     .result-chip.win  { background: rgba(30,158,90,0.12);  color: var(--green); border: 1px solid rgba(30,158,90,0.25); }
+    .result-chip.win.gold { background: #FBF3E2; color: #B8860B; border: 1px solid #EBD9AE; }
     .result-chip.loss { background: rgba(110,31,51,0.1);   color: var(--bordo); border: 1px solid rgba(110,31,51,0.2); }
     .result-chip.draw { background: rgba(107,123,114,0.1); color: var(--muted); border: 1px solid var(--line); }
 
@@ -650,6 +672,7 @@
       <span id="player-badge-txt">…</span><span class="admin-crown" id="admin-crown">👑</span>
     </div>
   </header>
+  <div class="cal-line"></div>
 
   <!-- NAV -->
   <nav class="nav">
@@ -1341,8 +1364,15 @@
       try {
         const r = await fetch(`${BASE}/attendance/${encodeURIComponent(nm.id)}.json`);
         if (r.ok) {
-          const data = await r.json();
-          ST.attendance = data || {};
+          const raw = await r.json();
+          // Firebase guarda por fbKey (PABLO_AEID) pero el render usa el nombre completo (PABLO AEID).
+          // Reconstruir el objeto indexado por player.name usando el campo "player" guardado en cada entrada.
+          if (raw) {
+            ST.attendance = {};
+            Object.values(raw).forEach(v => { if (v && v.player) ST.attendance[v.player] = v; });
+          } else {
+            ST.attendance = {};
+          }
           if (ST.activeTab === 'asistencia') renderAtt();
           if (ST.activeTab === 'parejas')    renderParejas();
           updateAttBadge();
@@ -1367,19 +1397,21 @@
 
   // Polling ligero cada 30s cuando no hay WebSocket
   function _startPolling() {
-    if (ST._pollTimer) return;
+    if (ST._pollTimer) return; // ya corriendo
     ST._pollTimer = setInterval(async () => {
-      if (ST.fbOK) { _stopPolling(); return; }
+      if (ST.fbOK) { _stopPolling(); return; } // WebSocket reconectó → parar
       if (!ST.player) return;
       try {
         const BASE = CFG.fbDefaultUrl;
         const nm = nextMatch();
+        // Refrescar chat
         const chatR = await fetch(`${BASE}/chat.json?orderBy=%22%24key%22&limitToLast=120`).then(r => r.json());
         if (chatR) {
           ST.chat = Object.entries(chatR).map(([id,m]) => ({id,...m})).sort((a,b) => a.ts - b.ts);
           updateChatBadge();
           if (ST.activeTab === 'chat') renderChat();
         }
+        // Refrescar asistencia del próximo partido
         if (nm) {
           const attR = await fetch(`${BASE}/attendance/${encodeURIComponent(nm.id)}.json`).then(r => r.json());
           if (attR) {
@@ -1390,7 +1422,7 @@
           if (ST.activeTab === 'parejas')    renderParejas();
           updateAttBadge();
         }
-      } catch(e) { }
+      } catch(e) { /* silencioso — si falla el poll, no rompemos nada */ }
     }, 30000);
   }
 
@@ -1402,6 +1434,7 @@
   function updateChatBadge() {
     const b = document.getElementById('badge-chat');
     if (!b) return;
+    // Si estamos en el chat, ya está todo leído
     if (ST.activeTab === 'chat') {
       ST.unreadChat = 0;
       b.classList.add('hidden');
@@ -1691,6 +1724,12 @@
 
     btn.textContent = 'Guardando…'; btn.disabled = true;
 
+    if (ST.fbDb && !ST.fbOK) {
+      // Sin WebSocket la migración de nombre colgaría — mejor avisar que colgar
+      errEl.textContent = '⚠️ Sin conexión en tiempo real. Esperá unos segundos y probá de nuevo.';
+      btn.textContent = 'Guardar'; btn.disabled = false;
+      return;
+    }
     if (ST.fbDb) {
       try {
         // Verificar que el nuevo nombre no esté tomado por otro jugador
@@ -1924,7 +1963,7 @@
   function _timeoutSignal(ms) {
     try { if (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) return AbortSignal.timeout(ms); } catch(_) {}
     try { const c = new AbortController(); setTimeout(() => c.abort(), ms); return c.signal; } catch(_) {}
-    return undefined;
+    return undefined; // sin timeout, pero al menos no rompe
   }
 
   async function apiGet(path) {
@@ -2143,6 +2182,21 @@
     const months=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
     return `${days[d.getDay()]} ${d.getDate()} ${months[d.getMonth()]}`;
   }
+  // Bloque de fecha estilo Opción A: día grande + mes en bordó
+  function dblock(s, onpaper) {
+    const months=['ENE','FEB','MAR','ABR','MAY','JUN','JUL','AGO','SEP','OCT','NOV','DIC'];
+    const d=s?pDate(s):new Date(NaN);
+    if (isNaN(d)) return `<div class="dblock${onpaper?' onpaper':''}"><b>—</b><i></i></div>`;
+    return `<div class="dblock${onpaper?' onpaper':''}"><b>${d.getDate()}</b><i>${months[d.getMonth()]}</i></div>`;
+  }
+  // Posición de Los Disidentes en la tabla (para el hero); '' si no hay datos
+  function myStandingPos() {
+    try {
+      const t=(ST.standings||[]).find(x=>isMyTeam(x.Equipo||x.equipo||''));
+      const p=t?(t.Posicion||t.posicion||''):'';
+      return p?`${p}°`:'';
+    } catch(_) { return ''; }
+  }
   function fmtDateTime(ts) {
     const d=new Date(ts);
     return `${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}`;
@@ -2175,11 +2229,10 @@
           const res = m.played
             ? `<span class="result-chip ${(m.home?m.gL:m.gV) > (m.home?m.gV:m.gL) ? 'win':'loss'}">${m.home?m.gL:m.gV}–${m.home?m.gV:m.gL}</span>`
             : `<span class="chip" style="opacity:.6;">—</span>`;
-          return `<div class="card" style="padding:12px 16px;">
-            <div class="flex" style="align-items:center;gap:10px;">
-              <span class="chip cx" style="font-family:var(--serif);font-size:.75rem;">F${m.rueda}</span>
-              <span class="flex1 tsm">${rival(m)}</span>
-              <span class="txs tmuted">${fmtDate(m.fecha)}</span>
+          return `<div class="card" style="padding:10px 14px;">
+            <div class="flex" style="align-items:center;gap:12px;">
+              ${dblock(m.fecha)}
+              <span class="flex1 tsm" style="font-weight:700;">${rival(m)} <span class="tmuted txs" style="font-weight:400;">F${m.rueda}</span></span>
               <span class="chip ${m.home?'cg':'co'}">${m.home?'Local':'Visita'}</span>
               ${res}
             </div>
@@ -2187,16 +2240,24 @@
         }).join('')}` : '');
     } else {
       const days=daysUntil(nm.fecha), locked=isLocked(nm);
+      const nConf=Object.values(ST.attendance||{}).filter(v=>v&&v.status==='confirmed').length;
+      const pos=myStandingPos();
       wrap.innerHTML=`
         <div class="match-hero">
-          <div class="match-kicker">Fecha ${nm.rueda} · ${nm.home?'🏠 Local':'✈️ Visitante'}</div>
-          <div class="match-vs">Los Disidentes</div>
-          <div class="tmuted txs italic" style="margin-bottom:4px;">vs</div>
-          <div class="match-rival">${rival(nm)}</div>
-          <div class="match-meta"><span>📅 ${fmtDate(nm.fecha)}</span>${nm.hora?`<span>🕐 ${nm.hora}</span>`:''}</div>
-          <div class="countdown-big">${days<=0?(days===0?'¡HOY!':'—'):days}</div>
-          ${days>0?'<div class="countdown-sub">días para el partido</div>':''}
-          <div style="margin-top:18px;">
+          <div class="mh-top">
+            ${dblock(nm.fecha,true)}
+            <div class="mh-info">
+              <div class="match-kicker" style="margin-bottom:2px;">Fecha ${nm.rueda} · ${nm.home?'🏠 Local':'✈️ Visitante'}</div>
+              <div class="match-vs" style="font-size:1.25rem;margin-bottom:0;">vs ${rival(nm)}</div>
+              <div class="match-meta" style="justify-content:flex-start;margin-bottom:0;margin-top:3px;"><span>📅 ${fmtDate(nm.fecha)}</span>${nm.hora?`<span>🕐 ${nm.hora}</span>`:''}</div>
+            </div>
+          </div>
+          <div class="mh-strip">
+            <div><b>${days<=0?(days===0?'HOY':'—'):days}</b><small>${days===1?'día':'días'}</small></div>
+            <div><b>${nConf}</b><small>confirmados</small></div>
+            ${pos?`<div class="oro"><b>${pos}</b><small>en tabla</small></div>`:''}
+          </div>
+          <div class="mh-cta">
             ${locked
               ?'<div class="lock-banner" style="justify-content:center;">🔒 Asistencia cerrada · Ver Parejas</div>'
               :`<button class="btn btn-p w100" style="background:rgba(255,255,255,0.15);border:1.5px solid rgba(255,255,255,0.35);color:#fff;" onclick="switchTab('asistencia')">Confirmar asistencia →</button>`}
@@ -2204,11 +2265,10 @@
         </div>
         <div class="slabel">PRÓXIMAS FECHAS</div>
         ${ST.fixture.filter(m=>!m.played).slice(1,5).map(m=>`
-          <div class="card" style="padding:12px 16px;">
-            <div class="flex" style="align-items:center;gap:10px;">
-              <span class="chip cx" style="font-family:var(--serif);font-size:.75rem;">F${m.rueda}</span>
-              <span class="flex1 tsm">${rival(m)}</span>
-              <span class="txs tmuted">${fmtDate(m.fecha)}</span>
+          <div class="card" style="padding:10px 14px;">
+            <div class="flex" style="align-items:center;gap:12px;">
+              ${dblock(m.fecha)}
+              <span class="flex1 tsm" style="font-weight:700;">${rival(m)} <span class="tmuted txs" style="font-weight:400;">F${m.rueda}</span></span>
               <span class="chip ${m.home?'cg':'co'}">${m.home?'Local':'Visita'}</span>
             </div>
           </div>`).join('')}
@@ -2219,11 +2279,11 @@
     if(played.length){
       rw.innerHTML='<div class="slabel">ÚLTIMOS RESULTADOS</div>'+played.map(m=>{
         const myG=m.home?m.gL:m.gV,thG=m.home?m.gV:m.gL,won=myG>thG;
-        return `<div class="card" style="padding:12px 16px;">
-          <div class="flex" style="align-items:center;gap:10px;">
-            <div style="min-width:48px;text-align:center;"><span class="txs tmuted" style="text-transform:uppercase;letter-spacing:.5px;display:block;">${fmtDate(m.fecha).split(' ').slice(1).join(' ')}</span></div>
-            <span class="flex1 tsm">vs ${rival(m)} <span class="tmuted txs">(F${m.rueda}${m.home?', L':', V'})</span></span>
-            <span class="result-chip ${won?'win':'loss'}">${myG}–${thG}</span>
+        return `<div class="card${won?' won':''}" style="padding:10px 14px;">
+          <div class="flex" style="align-items:center;gap:12px;">
+            ${dblock(m.fecha)}
+            <span class="flex1 tsm" style="font-weight:700;">vs ${rival(m)} <span class="tmuted txs" style="font-weight:400;">F${m.rueda}${m.home?' · L':' · V'}</span></span>
+            <span class="result-chip ${won?'win gold':'loss'}">${myG}–${thG}</span>
           </div>
         </div>`;
       }).join('');
@@ -2792,6 +2852,7 @@
       _renderSimResultados(ms);
     }, 30);
   }
+
   function _renderSimResultados(ms) {
     const out = document.getElementById('sim-out');
     if (!out) return;
@@ -3190,11 +3251,19 @@
     if (!ST.isAdmin) return;
     if (!ST.lbf.length) { toast('⚠️ Primero agregá jugadores a la lista'); return; }
     if (!confirm(`¿Cerrar la LBF con ${ST.lbf.length} jugadores?\n\nEsto fija el orden para el torneo (Art. 13/19).\nPodés reabrirla desde el panel de admin si necesitás hacer cambios.`)) return;
-    if (ST.fbDb) {
-      await ST.fbDb.ref('config/lbfLocked').set(true);
-      await ST.fbDb.ref('config/lbfLockedBy').set(ST.player);
-      await ST.fbDb.ref('config/lbfLockedAt').set(Date.now());
-    }
+    try {
+      if (ST.fbOK && ST.fbDb) {
+        await ST.fbDb.ref('config/lbfLocked').set(true);
+        await ST.fbDb.ref('config/lbfLockedBy').set(ST.player);
+        await ST.fbDb.ref('config/lbfLockedAt').set(Date.now());
+      } else {
+        const r = await fetch(`${CFG.fbDefaultUrl}/config.json`, {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ lbfLocked: true, lbfLockedBy: ST.player, lbfLockedAt: Date.now() })
+        });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+      }
+    } catch(e) { console.error('lockLBF:', e); toast('⚠️ No se pudo cerrar la LBF. Probá de nuevo.'); return; }
     ST.lbfLocked = true;
     localStorage.setItem('lbfLocked', 'true');
     toast('🔒 LBF cerrada — el orden queda fijo para el torneo');
@@ -3255,9 +3324,17 @@
     if(ST.lbf.find(p=>p.name.toUpperCase()===name)){toast('⚠️ Ya está en la lista');return;}
     _addingLBF = true;
     try {
-      if(ST.fbDb){
-        const allSnap = await ST.fbDb.ref('players').once('value');
-        const allPlayers = Object.values(allSnap.val()||{});
+      let allPlayers = null;
+      try {
+        if (ST.fbOK && ST.fbDb) {
+          const allSnap = await ST.fbDb.ref('players').once('value');
+          allPlayers = Object.values(allSnap.val()||{});
+        } else {
+          const data = await fetch(`${CFG.fbDefaultUrl}/players.json`, { signal: _timeoutSignal(6000) }).then(r => r.ok ? r.json() : null);
+          if (data) allPlayers = Object.values(data);
+        }
+      } catch(_) { /* sin datos → no bloquear el alta */ }
+      if(allPlayers){
         const registered = allPlayers.find(p => normalizeName(p.name)===normalizeName(name));
         if(!registered){
           toast(`⚠️ "${name}" no está registrado en la app. Primero debe registrarse.`);
@@ -4104,37 +4181,44 @@
     _tapTimer = setTimeout(() => { _tapCount = 0; }, 1500);
     if (_tapCount < 5) return;
     _tapCount = 0;
+
+    // Mostrar panel de debug
     const panel = document.createElement('div');
-    panel.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:9999;overflow:auto;padding:20px;color:#fff;font-family:monospace;font-size:12px;';
-    panel.innerHTML = '<h3 style="color:#5DEFA0;margin:0 0 12px">🔧 Debug Info</h3><pre id="dbg-out">Cargando…</pre><button onclick="this.parentElement.remove()" style="margin-top:16px;padding:8px 20px;background:#e05a6a;border:none;border-radius:8px;color:#fff;font-size:14px;cursor:pointer;">Cerrar</button>';
+    panel.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:9999;overflow:auto;padding:20px;color:#fff;font-family:monospace;font-size:12px;';
+    panel.innerHTML = '<h3 style="color:#5DEFA0;margin:0 0 12px">🔧 Debug — cargando…</h3><pre id="dbg-out">Por favor esperá...</pre><button onclick="this.parentElement.remove()" style="margin-top:16px;padding:8px 20px;background:#e05a6a;border:none;border-radius:8px;color:#fff;font-size:14px;cursor:pointer;">Cerrar</button>';
     document.body.appendChild(panel);
     const out = document.getElementById('dbg-out');
+
     const info = {
-      appVersion: 'v59',
-      installPromptReady: !!_installPrompt,
+      appVersion: 'v51',
       fbOK: ST?.fbOK,
       player: ST?.player,
       sdot: document.getElementById('sdot')?.className,
       pollTimer: !!ST?._pollTimer,
+      ua: navigator.userAgent,
       standalone: window.matchMedia('(display-mode: standalone)').matches || !!navigator.standalone,
       online: navigator.onLine,
-      ua: navigator.userAgent,
     };
+
+    // SW check
     try {
       const reg = await navigator.serviceWorker?.getRegistration('/app/');
-      info.swScript = reg?.active?.scriptURL?.split('/').pop();
+      info.sw = reg?.active?.scriptURL?.split('/').pop() || 'none';
       info.swState = reg?.active?.state;
     } catch(e) { info.sw = 'error'; }
-    info.wsTest = 'probando WebSocket…';
+
+    // WebSocket test directo
+    info.wsTest = 'testando…';
     out.textContent = JSON.stringify(info, null, 2);
+
     const wsResult = await new Promise(resolve => {
       try {
         const ws = new WebSocket('wss://los-disidentes-app-default-rtdb.firebaseio.com/.ws?v=5');
         const t = setTimeout(() => { ws.close(); resolve('TIMEOUT 5s'); }, 5000);
-        ws.onopen  = () => { clearTimeout(t); ws.close(); resolve('OPEN_OK ✅'); };
-        ws.onerror = e => { clearTimeout(t); resolve('ERROR: ' + e.type); };
-        ws.onclose = e => { clearTimeout(t); resolve('CLOSED code=' + e.code + ' clean=' + e.wasClean + ' reason="' + e.reason + '"'); };
-      } catch(e) { resolve('EXCEPTION: ' + e.message); }
+        ws.onopen  = () => { clearTimeout(t); ws.close(); resolve('✅ OPEN OK'); };
+        ws.onerror = e => { clearTimeout(t); resolve(`❌ ERROR: ${e.type}`); };
+        ws.onclose = e => { clearTimeout(t); resolve(`CLOSED code=${e.code} clean=${e.wasClean} reason="${e.reason}"`); };
+      } catch(e) { resolve(`EXCEPTION: ${e.message}`); }
     });
     info.wsTest = wsResult;
     out.textContent = JSON.stringify(info, null, 2);
