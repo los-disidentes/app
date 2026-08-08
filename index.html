@@ -400,6 +400,7 @@
       position: absolute; bottom: 0; left: 0; right: 0;
       background: linear-gradient(transparent, rgba(0,0,0,0.7));
       padding: 18px 6px 6px; color: #fff; font-size: 0.62rem; font-weight: 700;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
     .gallery-upload-progress {
       background: rgba(30,158,90,0.07); border: 1px solid rgba(30,158,90,0.2);
@@ -411,9 +412,10 @@
     /* ── HISTORIAL ───────────────────────────────── */
     .hist-table { width:100%; border-collapse:collapse; font-size:0.72rem; }
     .hist-table th { background:var(--green-dk); color:#fff; padding:6px 7px; text-align:center; font-weight:700; white-space:nowrap; font-family:var(--sans); }
-    .hist-table th.pname-col { text-align:left; min-width:90px; }
+    .hist-table th.pname-col { text-align:left; min-width:132px; }
     .hist-table td { padding:6px 7px; border-bottom:1px solid var(--line); text-align:center; }
-    .hist-table td.pname-col { text-align:left; font-weight:700; font-size:0.75rem; }
+    .hist-table td.pname-col { text-align:left; font-weight:700; font-size:0.72rem; white-space:nowrap; position:sticky; left:0; background:var(--paper); z-index:1; }
+    .hist-table tr:hover td.pname-col { background:#F1F8F3; }
     .hist-table tr:last-child td { border-bottom:none; }
     .hist-table tr:hover td { background:rgba(30,158,90,0.04); }
     .hcell-played  { color:var(--green); font-size:1rem; }
@@ -669,7 +671,7 @@
     </svg>
     <div class="header-title">
       <h1>Los Disidentes</h1>
-      <span>Quinta B Zona 2 · Liga Country Sur</span>
+      <span>Quinta A · Liga Country Sur</span>
     </div>
     <div class="player-badge" onclick="showPlayerMenu()" title="Opciones">
       <span id="player-badge-txt">…</span><span class="admin-crown" id="admin-crown">👑</span>
@@ -967,7 +969,7 @@
     if (!el) return;
     const list = Object.values(ST.online);
     if (!list.length) { el.textContent = ''; return; }
-    const names = list.map(p => p.name.split(' ')[0]);
+    const names = list.map(p => p.name);
     el.textContent = `· ${names.join(', ')} en línea`;
   }
 
@@ -3537,7 +3539,7 @@
       }).join('');
       const t = totals[name];
       return `<tr>
-        <td class="pname-col">${esc(name.split(' ')[0])}</td>
+        <td class="pname-col">${esc(name)}</td>
         ${cells}
         <td class="hcell-played fbold">${t.played}</td>
         <td class="hcell-conf fbold">${t.conf}</td>
@@ -3625,8 +3627,7 @@
         ? new Date(pays[key].paidAt).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit'})
         : null;
       const isSelf = ST.player && normalizeName(name) === normalizeName(ST.player);
-      const firstName = esc(name.split(' ')[0]);
-      const lastName  = esc((name.split(' ')[1] || '').charAt(0) + (name.split(' ')[1] ? '.' : ''));
+      const fullName = esc(name);
 
       let statusCell;
       // BUG-08: data-attrs en lugar de onclick con nombre interpolado
@@ -3648,7 +3649,7 @@
       }
 
       return `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--line);">
-        <span style="font-family:var(--sans);font-size:0.88rem;font-weight:700;color:var(--ink);">${firstName} ${lastName}</span>
+        <span style="font-family:var(--sans);font-size:0.88rem;font-weight:700;color:var(--ink);">${fullName}</span>
         ${statusCell}
       </div>`;
     }).join('');
@@ -3731,7 +3732,7 @@
       toast('↩️ Pago desmarcado');
     } else {
       await ST.fbDb.ref(path).set({ paid: true, paidAt: new Date().toISOString(), confirmedBy: ST.player });
-      toast(`✅ Pago de ${playerName.split(' ')[0]} confirmado`);
+      toast(`✅ Pago de ${playerName} confirmado`);
     }
     // Recargar fee card
     _feeCardLoaded = false;
@@ -3919,7 +3920,7 @@
     const grid = items.map(([key, p]) => `
       <div class="gallery-item" onclick="openLightbox('${key}')">
         <img src="${esc(p.thumb||p.url)}" alt="" loading="lazy">
-        <div class="gi-meta">${esc((p.uploader||'').split(' ')[0])}</div>
+        <div class="gi-meta">${esc(p.uploader||'')}</div>
       </div>`).join('');
 
     wrap.innerHTML = uploadBtn + `<div class="gallery-grid">${grid}</div>`;

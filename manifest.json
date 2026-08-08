@@ -1,7 +1,7 @@
 {
   "name": "Los Disidentes",
   "short_name": "Disidentes",
-  "description": "App del equipo Los Disidentes · Quinta B Zona 2 · Liga Country Sur",
+  "description": "App del equipo Los Disidentes · Quinta A · Liga Country Sur",
   "start_url": "/app/",
   "scope": "/app/",
   "display": "standalone",
@@ -10,10 +10,30 @@
   "orientation": "portrait-primary",
   "lang": "es-AR",
   "icons": [
-    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
-    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
   ],
   "categories": ["sports", "utilities"]
 }
