@@ -148,8 +148,40 @@
     .slabel { font-size: 0.61rem; text-transform: uppercase; letter-spacing: 1.4px; color: var(--bordo); margin: 14px 0 8px; font-weight: 700; font-family: var(--serif); }
 
     /* ── LÍNEA DE CAL (firma de marca) ───────────── */
-    .cal-line { height: 6px; background: var(--green); position: relative; flex-shrink: 0; }
+    .cal-line { height: 6px; background: var(--green); position: relative; flex-shrink: 0; overflow: hidden; }
     .cal-line::after { content: ''; position: absolute; top: 2px; left: 0; right: 0; height: 2px; background: #fff; }
+    .cal-line::before { content: ''; position: absolute; inset: 0; background: var(--mint); transform: translateX(-101%); }
+    .cal-line.wipe::before { animation: calwipe .55s cubic-bezier(.6,0,.2,1); }
+    @keyframes calwipe { 0%{transform:translateX(-101%)} 55%{transform:translateX(0)} 100%{transform:translateX(101%)} }
+    @media (prefers-reduced-motion: reduce) { .cal-line.wipe::before { animation: none; } }
+
+    /* ── SELECTOR DE EQUIPO ──────────────────────── */
+    .team-sel { background: var(--paper); border-bottom: 1px solid var(--line); padding: 10px 14px 11px; flex-shrink: 0; }
+    .team-sel.hidden { display: none; }
+    .ts-label { font-family: var(--serif); font-size: 0.545rem; font-weight: 700; letter-spacing: 2.2px; color: var(--bordo); text-transform: uppercase; margin-bottom: 7px; }
+    .seg { position: relative; display: flex; background: var(--cream); border: 1px solid var(--line); border-radius: 26px; padding: 4px; }
+    .seg-ind { position: absolute; top: 4px; bottom: 4px; left: 4px; width: calc(50% - 4px); background: var(--green-dk); border-radius: 22px; transition: transform .42s cubic-bezier(.65,0,.15,1); box-shadow: 0 3px 10px rgba(15,95,56,0.28); }
+    .seg[data-t="5B"] .seg-ind { transform: translateX(100%); }
+    .seg button { position: relative; z-index: 1; flex: 1; border: none; background: none; padding: 8px 4px 7px; cursor: pointer; font-family: var(--serif); font-weight: 700; font-size: 0.8rem; color: var(--muted); transition: color .3s; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+    .seg button.on { color: #fff; }
+    .seg button small { font-size: 0.53rem; font-weight: 400; letter-spacing: 1.2px; text-transform: uppercase; opacity: .62; font-family: var(--sans); }
+    .seg .mine { display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: var(--green); margin-left: 5px; vertical-align: middle; }
+    .seg button.on .mine { background: #8CE8B4; }
+    @media (prefers-reduced-motion: reduce) { .seg-ind { transition: none; } }
+
+    /* ── ESPERANDO A LA LIGA ─────────────────────── */
+    .wait-liga { background: var(--paper); border: 1px solid var(--line); border-radius: var(--r); padding: 26px 20px 24px; text-align: center; box-shadow: var(--shadow); margin-bottom: 14px; }
+    .wait-liga h3 { font-family: var(--serif); font-size: 1.02rem; font-weight: 700; color: var(--green-dk); margin-bottom: 7px; }
+    .wait-liga p { font-size: 0.79rem; color: var(--muted); line-height: 1.55; max-width: 34ch; margin: 0 auto; }
+    .wait-liga p strong { color: var(--ink); }
+    .wl-hist { margin-top: 11px !important; font-size: 0.73rem !important; }
+    .wl-art { position: relative; height: 46px; margin-bottom: 16px; }
+    .wl-line { position: absolute; left: 14%; right: 14%; bottom: 8px; height: 5px; background: var(--green); border-radius: 3px; }
+    .wl-line::after { content: ''; position: absolute; top: 1.5px; left: 0; right: 0; height: 2px; background: #fff; }
+    .wl-ball { position: absolute; left: 50%; bottom: 6px; width: 13px; height: 13px; margin-left: -6.5px; border-radius: 50%; background: var(--mint); border: 1.5px solid #BFE3CC; animation: wlbounce 2.6s cubic-bezier(.3,0,.5,1) infinite; }
+    .wl-ball::after { content: ''; position: absolute; left: 2px; right: 2px; top: 50%; height: 1px; background: #BFE3CC; transform: translateY(-50%); }
+    @keyframes wlbounce { 0%,100%{transform:translateY(0)} 45%{transform:translateY(-26px)} 55%{transform:translateY(-26px)} }
+    @media (prefers-reduced-motion: reduce) { .wl-ball { animation: none; } }
 
     /* ── BLOQUE DE FECHA (día grande + mes bordó) ── */
     .dblock { min-width: 46px; text-align: center; flex-shrink: 0; }
@@ -677,7 +709,8 @@
       <span id="player-badge-txt">…</span><span class="admin-crown" id="admin-crown">👑</span>
     </div>
   </header>
-  <div class="cal-line"></div>
+  <div class="cal-line" id="cal-line"></div>
+  <div id="team-sel" class="team-sel"></div>
 
   <!-- NAV -->
   <nav class="nav">
@@ -960,6 +993,127 @@
     perfLoaded:   false,
     lastFetch:    parseInt(localStorage.getItem('lastFetch') || '0'),
   };
+
+  // ═══════════════════════════════════════════
+  // EQUIPOS — 5ta A y 5ta B
+  // ═══════════════════════════════════════════
+  // Modelo: los datos de competencia viven bajo /teams/{id}/…  Las rutas viejas
+  // (/lbf, /attendance, /formation) NO se tocan: quedan intactas como respaldo
+  // y como fallback de lectura, así nada se pierde y nada se migra a la fuerza.
+  // /payments y /players siguen siendo del club: no llevan equipo.
+  const TEAMS = {
+    '5A': { id:'5A', corto:'5ta A', largo:'Quinta A' },
+    '5B': { id:'5B', corto:'5ta B', largo:'Quinta B' },
+  };
+  const TEAM_IDS = ['5A', '5B'];
+  // La LBF que hoy existe en la app la armó el capitán para 5ta B.
+  const LEGACY_TEAM  = '5B';
+  const DEFAULT_TEAM = '5B';
+
+  function isTeam(t) { return TEAM_IDS.indexOf(t) !== -1; }
+
+  // Estado por equipo. ST.lbf / ST.attendance / … son "vistas vivas" del equipo
+  // activo, para que todo el render existente siga funcionando sin cambios.
+  ST.team    = isTeam(localStorage.getItem('team')) ? localStorage.getItem('team') : DEFAULT_TEAM;
+  ST.lbfT    = { '5A': [],   '5B': JSON.parse(localStorage.getItem('lbf') || '[]') };
+  ST.attT    = { '5A': {},   '5B': {} };
+  ST.formT   = { '5A': null, '5B': null };
+  ST.fixT    = { '5A': [],   '5B': [] };
+  ST.stdT    = { '5A': [],   '5B': [] };
+  ST.lockedT = { '5A': false, '5B': localStorage.getItem('lbfLocked') === 'true' };
+  // Fixture del Apertura 2026 ya terminado: sólo alimenta el historial de Stats.
+  ST.fixtureLegacy = JSON.parse(localStorage.getItem('fixture') || '[]');
+
+  // Ruta de Firebase para un dato de competencia.
+  function tp(kind, team) { return `teams/${team || ST.team}/${kind}`; }
+
+  // Sincroniza las vistas vivas con el equipo activo. Llamar SIEMPRE que cambie
+  // ST.team o que se reemplace un contenedor por equipo.
+  function syncTeamViews() {
+    const t = ST.team;
+    ST.lbf        = ST.lbfT[t];
+    ST.attendance = ST.attT[t];
+    ST.formation  = ST.formT[t];
+    ST.fixture    = ST.fixT[t];
+    ST.standings  = ST.stdT[t];
+    ST.lbfLocked  = ST.lockedT[t];
+  }
+  syncTeamViews();
+
+  // Escribir en un contenedor por equipo sin romper la vista viva.
+  function setTeamData(kind, team, value) {
+    const map = { lbf:'lbfT', attendance:'attT', formation:'formT', fixture:'fixT', standings:'stdT', lbfLocked:'lockedT' };
+    const key = map[kind];
+    if (!key || !isTeam(team)) return;
+    ST[key][team] = value;
+    if (team === ST.team) syncTeamViews();
+  }
+
+  function setTeam(t) {
+    if (!isTeam(t) || t === ST.team) return;
+    ST.team = t;
+    localStorage.setItem('team', t);
+    syncTeamViews();
+    renderTeamSelector();
+    // Re-render de todo lo que depende del equipo
+    try { renderFixture();  } catch(e) { console.error('renderFixture:', e); }
+    try { renderStandings();} catch(e) { console.error('renderStandings:', e); }
+    try { renderAtt();      } catch(e) { console.error('renderAtt:', e); }
+    try { renderParejas();  } catch(e) { console.error('renderParejas:', e); }
+    try { renderLBF();      } catch(e) { console.error('renderLBF:', e); }
+    try { updateAttBadge(); } catch(e) { console.error('updateAttBadge:', e); }
+    if (ST.activeTab === 'rendimientos') { try { renderPerf(); } catch(e) {} }
+    const cal = document.getElementById('cal-line');
+    if (cal) { cal.classList.remove('wipe'); void cal.offsetWidth; cal.classList.add('wipe'); }
+    watchTeamMatch();
+  }
+
+  function renderTeamSelector() {
+    const box = document.getElementById('team-sel');
+    if (!box) return;
+    const miEquipo = miEquipoPorLBF();
+    box.innerHTML = `
+      <div class="ts-label">Estás viendo</div>
+      <div class="seg" data-t="${ST.team}">
+        <span class="seg-ind"></span>
+        ${TEAM_IDS.map(id => {
+          const n = (ST.lbfT[id] || []).filter(p => p && p.active !== false).length;
+          return `<button type="button" class="${id===ST.team?'on':''}" onclick="setTeam('${id}')">
+            ${TEAMS[id].corto}${miEquipo===id?'<span class="mine" title="Tu equipo"></span>':''}
+            <small>${n ? n + ' en lista' : 'sin lista'}</small>
+          </button>`;
+        }).join('')}
+      </div>`;
+  }
+
+  // En qué equipo está el jugador logueado, según las LBF.
+  function miEquipoPorLBF() {
+    if (!ST.player) return null;
+    for (const id of TEAM_IDS) {
+      if ((ST.lbfT[id] || []).some(p => p && normalizeName(p.name || '') === normalizeName(ST.player))) return id;
+    }
+    return null;
+  }
+
+  // El selector sólo se muestra en las solapas que dependen del equipo.
+  const TEAM_SCOPED_TABS = ['fixture', 'asistencia', 'parejas', 'rendimientos', 'lbf'];
+  function updateTeamSelectorVisibility() {
+    const box = document.getElementById('team-sel');
+    if (box) box.classList.toggle('hidden', TEAM_SCOPED_TABS.indexOf(ST.activeTab) === -1);
+  }
+
+  // Bloque reutilizable para cuando la Liga todavía no publicó el fixture.
+  function esperandoLiga(extra) {
+    return `<div class="wait-liga">
+      <div class="wl-art" aria-hidden="true">
+        <span class="wl-line"></span><span class="wl-ball"></span>
+      </div>
+      <h3>Esperando la actualización de la Liga</h3>
+      <p>Todavía no publicaron el fixture de <strong>${TEAMS[ST.team].largo}</strong> para el Clausura 2026.
+      Apenas lo carguen, aparece acá solo.</p>
+      ${extra || ''}
+    </div>`;
+  }
 
   // ═══════════════════════════════════════════
   // PRESENCIA — quién está en línea
@@ -1306,29 +1460,47 @@
     ST._restLoaded = true;
     const BASE = CFG.fbDefaultUrl;
 
-    // LBF
-    try {
-      const r = await fetch(`${BASE}/lbf.json`);
-      if (r.ok) {
-        const data = _toArr(await r.json());
-        if (data.length) {
-          ST.lbf = data;
-          localStorage.setItem('lbf', JSON.stringify(data));
-          updateLBFDatalist();
-          if (ST.activeTab === 'lbf')        renderLBF();
-          if (ST.activeTab === 'asistencia') renderAtt();
-          if (ST.activeTab === 'parejas')    renderParejas();
+    // LBF por equipo (+ fallback a la ruta vieja para 5ta B)
+    for (const id of TEAM_IDS) {
+      try {
+        const r = await fetch(`${BASE}/teams/${id}/lbf.json`);
+        if (r.ok) {
+          const data = _toArr(await r.json());
+          if (data.length) {
+            if (id === LEGACY_TEAM) { ST._lbfOwn5B = true; localStorage.setItem('lbf', JSON.stringify(data)); }
+            setTeamData('lbf', id, data);
+            _afterLBFChange(id);
+          }
         }
-      }
-    } catch(_) {}
+        const rl = await fetch(`${BASE}/teams/${id}/lbfLocked.json`);
+        if (rl.ok) {
+          const v = await rl.json();
+          if (v !== null) { if (id === LEGACY_TEAM) ST._lbfLockedOwn5B = true; setTeamData('lbfLocked', id, !!v); }
+        }
+      } catch(_) {}
+    }
+    if (!ST._lbfOwn5B) {
+      try {
+        const r = await fetch(`${BASE}/lbf.json`);
+        if (r.ok) {
+          const data = _toArr(await r.json());
+          if (data.length) {
+            localStorage.setItem('lbf', JSON.stringify(data));
+            setTeamData('lbf', LEGACY_TEAM, data);
+            _afterLBFChange(LEGACY_TEAM);
+          }
+        }
+      } catch(_) {}
+    }
 
-    // Config / lbfLocked
+    // Config / lbfLocked (ruta vieja → sólo si 5ta B no tiene flag propio)
     try {
+      if (ST._lbfLockedOwn5B) throw new Error('skip');
       const r = await fetch(`${BASE}/config/lbfLocked.json`);
       if (r.ok) {
         const locked = !!(await r.json());
-        if (ST.lbfLocked !== locked) {
-          ST.lbfLocked = locked;
+        if (ST.lockedT[LEGACY_TEAM] !== locked) {
+          setTeamData('lbfLocked', LEGACY_TEAM, locked);
           localStorage.setItem('lbfLocked', String(locked));
           if (ST.activeTab === 'lbf') renderLBF();
         }
@@ -1367,16 +1539,16 @@
     const nm = nextMatch ? nextMatch() : null;
     if (nm) {
       try {
-        const r = await fetch(`${BASE}/attendance/${encodeURIComponent(nm.id)}.json`);
+        const r = await fetch(`${BASE}/teams/${ST.team}/attendance/${encodeURIComponent(nm.id)}.json`);
         if (r.ok) {
           const raw = await r.json();
           // Firebase guarda por fbKey (PABLO_AEID) pero el render usa el nombre completo (PABLO AEID).
           // Reconstruir el objeto indexado por player.name usando el campo "player" guardado en cada entrada.
           if (raw) {
-            ST.attendance = {};
+            ST.attendance = {}; ST.attT[ST.team] = ST.attendance;
             Object.values(raw).forEach(v => { if (v && v.player) ST.attendance[v.player] = v; });
           } else {
-            ST.attendance = {};
+            ST.attendance = {}; ST.attT[ST.team] = ST.attendance;
           }
           if (ST.activeTab === 'asistencia') renderAtt();
           if (ST.activeTab === 'parejas')    renderParejas();
@@ -1418,11 +1590,11 @@
         }
         // Refrescar asistencia del próximo partido
         if (nm) {
-          const attR = await fetch(`${BASE}/attendance/${encodeURIComponent(nm.id)}.json`).then(r => r.json());
+          const attR = await fetch(`${BASE}/teams/${ST.team}/attendance/${encodeURIComponent(nm.id)}.json`).then(r => r.json());
           if (attR) {
-            ST.attendance = {};
+            ST.attendance = {}; ST.attT[ST.team] = ST.attendance;
             Object.values(attR).forEach(v => { if (v && v.player) ST.attendance[v.player] = v; });
-          } else { ST.attendance = {}; }
+          } else { ST.attendance = {}; ST.attT[ST.team] = ST.attendance; }
           if (ST.activeTab === 'asistencia') renderAtt();
           if (ST.activeTab === 'parejas')    renderParejas();
           updateAttBadge();
@@ -1766,14 +1938,24 @@
           await ST.fbDb.ref(`config/admins/${oldKey}`).remove();
         }
 
-        // BUG-05: Migrar LBF — actualizar el nombre en el array
+        // BUG-05: Migrar LBF — actualizar el nombre en TODAS las listas donde figure
+        const _renombrar = arr => arr.map(p => normalizeName(p.name||'') === normalizeName(ST.player) ? {...p, name: newName} : p);
+        for (const _tid of TEAM_IDS) {
+          const snap = await ST.fbDb.ref(tp('lbf', _tid)).once('value');
+          const arr = _toArr(snap.val());
+          if (!arr.length) continue;
+          const upd = _renombrar(arr);
+          await ST.fbDb.ref(tp('lbf', _tid)).set(upd);
+          setTeamData('lbf', _tid, upd);
+          if (_tid === LEGACY_TEAM) localStorage.setItem('lbf', JSON.stringify(upd));
+        }
+        // Ruta vieja: sigue siendo el fallback de 5ta B, hay que renombrar ahí también
         const lbfSnap = await ST.fbDb.ref('lbf').once('value');
         const lbfArr = _toArr(lbfSnap.val());
         if (lbfArr.length) {
-          const updatedLbf = lbfArr.map(p => normalizeName(p.name||'') === normalizeName(ST.player) ? {...p, name: newName} : p);
+          const updatedLbf = _renombrar(lbfArr);
           await ST.fbDb.ref('lbf').set(updatedLbf);
-          ST.lbf = updatedLbf;
-          localStorage.setItem('lbf', JSON.stringify(updatedLbf));
+          if (!ST._lbfOwn5B) { setTeamData('lbf', LEGACY_TEAM, updatedLbf); localStorage.setItem('lbf', JSON.stringify(updatedLbf)); }
         }
         // BUG-05: Migrar payments del mes actual
         const curMonth = new Date().toISOString().slice(0,7);
@@ -1875,25 +2057,40 @@
         ST.online = s.val() || {};
         renderOnline();
       });
+      // LBF por equipo. La ruta vieja /lbf se sigue leyendo como fallback de
+      // 5ta B: mientras nadie edite la lista nueva, se ve la del capitán.
+      TEAM_IDS.forEach(id => {
+        ST.fbDb.ref(tp('lbf', id)).on('value', s => {
+          const d = _toArr(s.val());
+          if (id === LEGACY_TEAM && !d.length) return; // dejar que mande el fallback
+          setTeamData('lbf', id, d);
+          if (id === LEGACY_TEAM) localStorage.setItem('lbf', JSON.stringify(d));
+          _afterLBFChange(id);
+        });
+        ST.fbDb.ref(tp('lbfLocked', id)).on('value', s => {
+          setTeamData('lbfLocked', id, !!s.val());
+          if (id === ST.team && ST.activeTab === 'lbf') renderLBF();
+        });
+      });
+      // Fallback: LBF vieja → 5ta B, sólo si 5ta B todavía no tiene lista propia.
       ST.fbDb.ref('lbf').on('value', s => {
         const d = _toArr(s.val());
-        if (d.length) {
-          ST.lbf = d;
-          localStorage.setItem('lbf', JSON.stringify(d));
-          updateLBFDatalist();
-          if (ST.activeTab === 'lbf')        renderLBF();
-          if (ST.activeTab === 'asistencia') renderAtt();
-          if (ST.activeTab === 'parejas')    renderParejas();
-        }
+        if (!d.length) return;
+        localStorage.setItem('lbf', JSON.stringify(d));
+        if ((ST.lbfT[LEGACY_TEAM] || []).length && ST._lbfOwn5B) return;
+        setTeamData('lbf', LEGACY_TEAM, d);
+        _afterLBFChange(LEGACY_TEAM);
       });
       ST.fbDb.ref('news').limitToLast(30).on('value', s => {
         _news = s.val() || {};
         renderNews();
       });
       ST.fbDb.ref('config/lbfLocked').on('value', s => {
-        ST.lbfLocked = !!s.val();
-        localStorage.setItem('lbfLocked', ST.lbfLocked);
-        if (ST.activeTab === 'lbf') renderLBF();
+        // Cierre viejo → aplica a 5ta B mientras no tenga su propio flag
+        if (ST._lbfLockedOwn5B) return;
+        setTeamData('lbfLocked', LEGACY_TEAM, !!s.val());
+        localStorage.setItem('lbfLocked', !!s.val());
+        if (ST.team === LEGACY_TEAM && ST.activeTab === 'lbf') renderLBF();
       });
       initGallery();
       const nm = nextMatch();
@@ -1905,28 +2102,47 @@
         updateChatBadge();
         if (ST.activeTab === 'chat') renderChat();
       });
-      if (nm) {
-        ST.fbDb.ref(`formation/${nm.id}`).on('value', s => {
-          ST.formation = s.val();
-          if (ST.activeTab === 'parejas') renderParejas();
-        });
-      }
+      watchTeamMatch();
     } catch(e) {
       setStatus(false, 'Error Firebase: ' + e.message.slice(0,30));
     }
   }
 
+  // Re-render tras un cambio de LBF de cualquier equipo
+  function _afterLBFChange(team) {
+    updateLBFDatalist();
+    renderTeamSelector();
+    if (team !== ST.team) return;
+    if (ST.activeTab === 'lbf')        renderLBF();
+    if (ST.activeTab === 'asistencia') renderAtt();
+    if (ST.activeTab === 'parejas')    renderParejas();
+  }
+
+  // Suscribe asistencia y formación del próximo partido del equipo activo.
+  function watchTeamMatch() {
+    if (!ST.fbOK || !ST.fbDb) return;
+    const nm = nextMatch();
+    if (!nm) return;
+    watchAttendance(nm.id);
+    const team = ST.team;
+    try {
+      ST.fbDb.ref(tp('formation/' + nm.id, team)).on('value', s => {
+        setTeamData('formation', team, s.val());
+        if (team === ST.team && ST.activeTab === 'parejas') renderParejas();
+      });
+    } catch(e) { console.error('watchTeamMatch:', e); }
+  }
+
   function watchAttendance(matchId) {
     if (!ST.fbDb) return;
-    ST.fbDb.ref(`attendance/${matchId}`).on('value', s => {
+    const team = ST.team;
+    ST.fbDb.ref(tp('attendance/' + matchId, team)).on('value', s => {
       const raw = s.val();
       // Reconstruir indexado por nombre (usando campo player) para que el render funcione
-      if (raw) {
-        ST.attendance = {};
-        Object.values(raw).forEach(v => { if (v && v.player) ST.attendance[v.player] = v; });
-      } else {
-        ST.attendance = {};
-      }
+      const idx = {};
+      if (raw) Object.values(raw).forEach(v => { if (v && v.player) idx[v.player] = v; });
+      setTeamData('attendance', team, idx);
+      if (team !== ST.team) return;
       if (ST.activeTab === 'asistencia') renderAtt();
       if (ST.activeTab === 'parejas')    renderParejas();
       updateAttBadge();
@@ -2008,17 +2224,40 @@
     return CFG.teamKeywords.some(k => n.includes(k));
   }
 
+  // Fixture y tabla por equipo. Mientras la Liga no publique el Clausura 2026,
+  // estos archivos no existen y la app muestra el estado de espera.
+  async function loadTeamLeagueData() {
+    await Promise.all(TEAM_IDS.map(async id => {
+      try {
+        const [fx, st] = await Promise.all([
+          fetch(`/app/fixture-${id}.json?t=${Date.now()}`, { cache:'no-store', signal:_timeoutSignal(6000) }).then(r => r.ok ? r.json() : null).catch(() => null),
+          fetch(`/app/standings-${id}.json?t=${Date.now()}`, { cache:'no-store', signal:_timeoutSignal(6000) }).then(r => r.ok ? r.json() : null).catch(() => null),
+        ]);
+        if (Array.isArray(fx) && fx.length) {
+          const ms = fx.map(p => ({
+            id: p.NroPartidoCampeonato || p.id, rueda: parseInt(p.RuedaPartido || p.rueda) || 0,
+            fecha: p.FechaPartido || p.fecha, hora: p.HoraPartido || p.hora || '',
+            local: p.Local || p.local, visitor: p.Visitante || p.visitor,
+            gL: parseInt(p.GolesLocal ?? p.gL) || 0, gV: parseInt(p.GolesVisitante ?? p.gV) || 0,
+            played: p.Jugado === '1' || p.Jugado === 1 || p.played === true,
+            home: isMyTeam(p.Local || p.local),
+          })).sort((a,b) => pDate(a.fecha) - pDate(b.fecha));
+          setTeamData('fixture', id, ms);
+          localStorage.setItem('fixture_' + id, JSON.stringify(ms));
+        }
+        if (Array.isArray(st) && st.length) {
+          setTeamData('standings', id, st);
+          localStorage.setItem('standings_' + id, JSON.stringify(st));
+        }
+      } catch(e) { console.warn('loadTeamLeagueData ' + id + ':', e); }
+    }));
+    renderFixture(); renderStandings(); updateAttBadge(); watchTeamMatch();
+  }
+
   async function loadFixture() {
+    // Histórico: el Apertura 2026 ya terminado, sólo para el historial de Stats.
     const data = await apiGet(`/api/fixture_mod.php?NroCampeonato=${CFG.campId}`);
-    if (!data) {
-      // Nunca dejar el spinner girando: si no hay nada cacheado, avisar y ofrecer reintento
-      if (ST.fixture.length) renderFixture();
-      else {
-        const w = document.getElementById('next-match-wrap');
-        if (w) w.innerHTML = '<div class="empty"><div class="ei">📡</div><h3>No pudimos cargar el fixture</h3><p>Chequeá tu conexión y tocá «Actualizar datos» abajo.</p></div>';
-      }
-      return;
-    }
+    if (!data) return;
     const matches = [];
     data.forEach(fecha => {
       (fecha.partidos || []).forEach(p => {
@@ -2033,32 +2272,23 @@
       });
     });
     const newPlayed = matches.filter(m=>m.played).length;
-    const oldPlayed = ST.fixture.filter(m=>m.played).length;
+    const oldPlayed = (ST.fixtureLegacy || []).filter(m=>m.played).length;
     if (newPlayed !== oldPlayed) { ST.perfLoaded = false; ST.perfs = []; } // nuevo resultado → recalcular stats
-    ST.fixture = matches.sort((a,b) => pDate(a.fecha)-pDate(b.fecha));
-    localStorage.setItem('fixture', JSON.stringify(ST.fixture));
-    renderFixture();
-    if (ST.fbDb) { const nm = nextMatch(); if (nm) watchAttendance(nm.id); }
+    ST.fixtureLegacy = matches.sort((a,b) => pDate(a.fecha)-pDate(b.fecha));
+    localStorage.setItem('fixture', JSON.stringify(ST.fixtureLegacy));
   }
 
   async function loadStandings() {
+    // Histórico del Apertura. La tabla que se muestra es la del equipo activo.
     const data = await apiGet(`/api/tabla_posiciones.php?NroCampeonato=${CFG.campId}`);
-    if (!data) {
-      if (ST.standings.length) renderStandings();
-      else {
-        const w = document.getElementById('standings-wrap');
-        if (w) w.innerHTML = '<div class="tcenter tmuted tsm" style="padding:10px">No disponible — tocá «Actualizar datos»</div>';
-      }
-      return;
-    }
-    ST.standings = data;
+    if (!data) return;
+    ST.standingsLegacy = data;
     localStorage.setItem('standings', JSON.stringify(data));
-    renderStandings();
   }
 
   async function refreshData(showFeedback = true) {
     if (showFeedback) toast('🔄 Actualizando datos de la liga…', 2000);
-    await Promise.all([loadFixture(), loadStandings()]);
+    await Promise.all([loadFixture(), loadStandings(), loadTeamLeagueData()]);
     ST.lastFetch = Date.now();
     localStorage.setItem('lastFetch', ST.lastFetch);
     updateRefreshLabel();
@@ -2072,8 +2302,12 @@
     el.textContent = diff < 1 ? 'Actualizado hace un momento' : `Actualizado hace ${diff} min`;
   }
 
+  // Para historial y rendimientos: si el torneo nuevo todavía no arrancó,
+  // seguimos mostrando el Apertura 2026 en vez de una pantalla vacía.
+  function fixtureHist() { return (ST.fixture && ST.fixture.length) ? ST.fixture : (ST.fixtureLegacy || []); }
+
   async function loadPerformances() {
-    const played = ST.fixture.filter(m => m.played);
+    const played = fixtureHist().filter(m => m.played);
     if (!played.length) { ST.perfLoaded = true; renderRend(); return; }
     const stats = {};
     // Fetch todos los partidos en paralelo para no esperar secuencialmente
@@ -2224,10 +2458,21 @@
   // ═══════════════════════════════════════════
   function renderFixture() {
     const nm=nextMatch(), wrap=document.getElementById('next-match-wrap');
+    if (!ST.fixture.length) {
+      // La Liga todavía no publicó el fixture de esta categoría
+      wrap.innerHTML = esperandoLiga(
+        (ST.fixtureLegacy && ST.fixtureLegacy.length)
+          ? '<p class="wl-hist">Mientras tanto, en <strong>Stats</strong> seguís teniendo el historial del Apertura 2026.</p>'
+          : ''
+      );
+      const rw0 = document.getElementById('results-wrap');
+      if (rw0) rw0.innerHTML = '';
+      return;
+    }
     if (!nm) {
       // Sin próxima fecha → mostrar igual el fixture completo del torneo
       const all = ST.fixture.slice().sort((a,b) => pDate(a.fecha) - pDate(b.fecha));
-      wrap.innerHTML = '<div class="empty"><div class="ei">🏆</div><h3>Torneo finalizado</h3><p>Sin próximas fechas. Esperando el Clausura 2026.</p></div>'
+      wrap.innerHTML = '<div class="empty"><div class="ei">🏆</div><h3>Torneo finalizado</h3><p>Sin próximas fechas.</p></div>'
         + (all.length ? `
         <div class="slabel">FIXTURE DEL TORNEO</div>
         ${all.map(m => {
@@ -2297,7 +2542,14 @@
 
   function renderStandings() {
     const wrap=document.getElementById('standings-wrap');
-    if(!ST.standings.length){wrap.innerHTML='<div class="tcenter tmuted tsm">No disponible</div>';return;}
+    if(!wrap) return;
+    if(!ST.standings.length){
+      wrap.innerHTML = `<div class="card-title">🏅 Posiciones · ${TEAMS[ST.team].largo}</div>
+        <div class="tcenter tmuted tsm" style="padding:14px 6px;line-height:1.6">
+          Esperando que la Liga publique la tabla de esta categoría.
+        </div>`;
+      return;
+    }
     wrap.innerHTML=`
       <div class="card-title">🏅 Posiciones</div>
       <table class="stable">
@@ -2317,6 +2569,8 @@
   // ═══════════════════════════════════════════
   function renderAtt() {
     const wrap=document.getElementById('att-content'),nm=nextMatch();
+    if(!wrap) return;
+    if(!ST.fixture.length){ wrap.innerHTML = esperandoLiga('<p class="wl-hist">Cuando esté el fixture vas a poder confirmar acá.</p>'); return; }
     if(!nm){wrap.innerHTML='<div class="empty"><div class="ei">📅</div><h3>Sin partidos</h3><p>No hay fechas próximas.</p></div>';return;}
     const locked=isLocked(nm),days=daysUntil(nm.fecha);
     const confNames=Object.entries(ST.attendance).filter(([,v])=>v.status==='confirmed').map(([k])=>k);
@@ -2371,14 +2625,16 @@
     if(!nm||isLocked(nm)){toast('🔒 La asistencia está cerrada');return;}
     if(!ST.player){toast('Iniciá sesión para confirmar');return;}
     const data={status,ts:Date.now(),player:ST.player};
+    const team = ST.team;
     if(ST.fbOK) {
-      await ST.fbDb.ref(`attendance/${nm.id}/${fbKey(ST.player)}`).set(data);
+      await ST.fbDb.ref(tp(`attendance/${nm.id}/${fbKey(ST.player)}`, team)).set(data);
     } else {
       // REST fallback — PUT directo sin WebSocket
-      await fetch(`${CFG.fbDefaultUrl}/attendance/${encodeURIComponent(nm.id)}/${fbKey(ST.player)}.json`, {
+      const r = await fetch(`${CFG.fbDefaultUrl}/teams/${team}/attendance/${encodeURIComponent(nm.id)}/${fbKey(ST.player)}.json`, {
         method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data)
       });
-      ST.attendance[ST.player] = data; // local update para UI inmediata
+      if (!r.ok) { toast('⚠️ No se pudo guardar. Probá de nuevo.'); return; }
+      ST.attT[team][ST.player] = data; // local update para UI inmediata
       renderAtt();
     }
     toast(status==='confirmed'?'✅ ¡Confirmado! Jugamos juntos 🎾':'📝 Registrado. ¡La próxima!');
@@ -2406,6 +2662,8 @@
 
   function _renderParejasCore() {
     const wrap=document.getElementById('parejas-content'),nm=nextMatch();
+    if(!wrap) return;
+    if(!ST.fixture.length){ wrap.innerHTML = esperandoLiga('<p class="wl-hist">El simulador de formaciones sigue disponible más abajo.</p>'); return; }
     if(!nm){wrap.innerHTML='<div class="empty"><div class="ei">📅</div><h3>Sin partidos</h3></div>';return;}
     const confNames=Object.entries(ST.attendance).filter(([,v])=>v.status==='confirmed').map(([k])=>k);
     const confirmed=ST.lbf.filter(p=>p.active&&confNames.includes(p.name)).map((p,i)=>({name:p.name,lbfPos:p.lbfPosition||(i+1),mn:i+1}));
@@ -3000,13 +3258,13 @@
     // colgaba para siempre. Mismo bug que tenían las operaciones de admin.
     try {
       if (ST.fbOK && ST.fbDb) {
-        await ST.fbDb.ref(`formation/${nm.id}`).set(data);
+        await ST.fbDb.ref(tp(`formation/${nm.id}`)).set(data);
       } else {
-        const r = await fetch(`${CFG.fbDefaultUrl}/formation/${encodeURIComponent(nm.id)}.json`, {
+        const r = await fetch(`${CFG.fbDefaultUrl}/teams/${ST.team}/formation/${encodeURIComponent(nm.id)}.json`, {
           method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data)
         });
         if (!r.ok) throw new Error('HTTP ' + r.status);
-        ST.formation = data;
+        setTeamData('formation', ST.team, data);
         renderParejas();
       }
     } catch(e) {
@@ -3026,9 +3284,9 @@
     const nm=nextMatch(); if(!nm) return;
     try {
       if (ST.fbOK && ST.fbDb) {
-        await ST.fbDb.ref(`formation/${nm.id}/locked`).set(false);
+        await ST.fbDb.ref(tp(`formation/${nm.id}/locked`)).set(false);
       } else {
-        const r = await fetch(`${CFG.fbDefaultUrl}/formation/${encodeURIComponent(nm.id)}/locked.json`, {
+        const r = await fetch(`${CFG.fbDefaultUrl}/teams/${ST.team}/formation/${encodeURIComponent(nm.id)}/locked.json`, {
           method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: 'false'
         });
         if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -3258,18 +3516,19 @@
     if (!confirm(`¿Cerrar la LBF con ${ST.lbf.length} jugadores?\n\nEsto fija el orden para el torneo (Art. 13/19).\nPodés reabrirla desde el panel de admin si necesitás hacer cambios.`)) return;
     try {
       if (ST.fbOK && ST.fbDb) {
-        await ST.fbDb.ref('config/lbfLocked').set(true);
-        await ST.fbDb.ref('config/lbfLockedBy').set(ST.player);
-        await ST.fbDb.ref('config/lbfLockedAt').set(Date.now());
+        await ST.fbDb.ref(tp('lbfLocked')).set(true);
+        await ST.fbDb.ref(tp('lbfLockedBy')).set(ST.player);
+        await ST.fbDb.ref(tp('lbfLockedAt')).set(Date.now());
       } else {
-        const r = await fetch(`${CFG.fbDefaultUrl}/config.json`, {
+        const r = await fetch(`${CFG.fbDefaultUrl}/teams/${ST.team}.json`, {
           method: 'PATCH', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ lbfLocked: true, lbfLockedBy: ST.player, lbfLockedAt: Date.now() })
         });
         if (!r.ok) throw new Error('HTTP ' + r.status);
       }
     } catch(e) { console.error('lockLBF:', e); toast('⚠️ No se pudo cerrar la LBF. Probá de nuevo.'); return; }
-    ST.lbfLocked = true;
+    if (ST.team === LEGACY_TEAM) ST._lbfLockedOwn5B = true;
+    setTeamData('lbfLocked', ST.team, true);
     localStorage.setItem('lbfLocked', 'true');
     toast('🔒 LBF cerrada — el orden queda fijo para el torneo');
     renderLBF();
@@ -3279,16 +3538,16 @@
     if (!ST.isAdmin) return;
     if (!confirm('¿Reabrir la LBF para editar el orden?\nPodés volver a cerrarla cuando termines.')) return;
     try {
-      if (ST.fbOK && ST.fbDb) await ST.fbDb.ref('config/lbfLocked').set(false);
+      if (ST.fbOK && ST.fbDb) await ST.fbDb.ref(tp('lbfLocked')).set(false);
       else {
-        const r = await fetch(`${CFG.fbDefaultUrl}/config/lbfLocked.json`, {
+        const r = await fetch(`${CFG.fbDefaultUrl}/teams/${ST.team}/lbfLocked.json`, {
           method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: 'false'
         });
         if (!r.ok) throw new Error('HTTP ' + r.status);
       }
     } catch(e) { console.error('unlockLBF:', e); toast('⚠️ No se pudo reabrir la LBF'); return; }
-    ST.lbfLocked = false;
-    localStorage.setItem('lbfLocked', 'false');
+    if (ST.team === LEGACY_TEAM) { ST._lbfLockedOwn5B = true; localStorage.setItem('lbfLocked', 'false'); }
+    setTeamData('lbfLocked', ST.team, false);
     toast('🔓 LBF abierta — podés editar el orden');
     renderLBF();
   }
@@ -3449,7 +3708,7 @@
     wrap.innerHTML = '<div class="tcenter" style="padding:14px;"><span class="spin"></span><div class="txs tmuted mt8">Cargando historial…</div></div>';
 
     // Fechas pasadas o con asistencia cerrada
-    const past = ST.fixture.filter(m => m.played || isLocked(m));
+    const past = fixtureHist().filter(m => m.played || isLocked(m));
     if (!past.length) {
       wrap.innerHTML = '<div class="txs tmuted tcenter" style="padding:10px;">Aún no hay fechas con historial disponible.</div>';
       return;
@@ -3459,24 +3718,29 @@
     let allAtt = {}, allForm = {};
     try {
       const _to = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 5000));
-      const [attSnap, formSnap] = await Promise.race([
+      const [attSnap, formSnap, tAttSnap, tFormSnap] = await Promise.race([
         Promise.all([
           ST.fbDb.ref('attendance').once('value'),
           ST.fbDb.ref('formation').once('value'),
+          ST.fbDb.ref(tp('attendance')).once('value'),
+          ST.fbDb.ref(tp('formation')).once('value'),
         ]),
         _to,
       ]);
-      allAtt  = attSnap.val()  || {};
-      allForm = formSnap.val() || {};
+      // Histórico (Apertura, ruta vieja) + lo nuevo del equipo activo
+      allAtt  = Object.assign({}, attSnap.val()  || {}, tAttSnap.val()  || {});
+      allForm = Object.assign({}, formSnap.val() || {}, tFormSnap.val() || {});
     } catch(_) {
       try {
         const BASE = CFG.fbDefaultUrl;
-        const [ra, rf] = await Promise.all([
-          fetch(`${BASE}/attendance.json`).then(r => r.json()),
-          fetch(`${BASE}/formation.json`).then(r => r.json()),
+        const [ra, rf, ta, tf] = await Promise.all([
+          fetch(`${BASE}/attendance.json`).then(r => r.json()).catch(() => null),
+          fetch(`${BASE}/formation.json`).then(r => r.json()).catch(() => null),
+          fetch(`${BASE}/teams/${ST.team}/attendance.json`).then(r => r.json()).catch(() => null),
+          fetch(`${BASE}/teams/${ST.team}/formation.json`).then(r => r.json()).catch(() => null),
         ]);
-        allAtt  = ra || {};
-        allForm = rf || {};
+        allAtt  = Object.assign({}, ra || {}, ta || {});
+        allForm = Object.assign({}, rf || {}, tf || {});
       } catch(e2) {}
     }
 
@@ -3757,15 +4021,19 @@
   }
 
   async function saveLBF(){
-    localStorage.setItem('lbf', JSON.stringify(ST.lbf));
+    const team = ST.team;
+    if (team === LEGACY_TEAM) {
+      localStorage.setItem('lbf', JSON.stringify(ST.lbf));
+      ST._lbfOwn5B = true;   // desde ahora manda la lista propia de 5ta B
+    }
     // Antes esto fallaba en silencio: la lista quedaba solo en este dispositivo
     // y el resto del equipo no la veía nunca.
     try {
       if (ST.fbOK) {
-        await ST.fbDb.ref('lbf').set(ST.lbf);
+        await ST.fbDb.ref(tp('lbf', team)).set(ST.lbfT[team]);
       } else {
-        const r = await fetch(`${CFG.fbDefaultUrl}/lbf.json`, {
-          method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(ST.lbf)
+        const r = await fetch(`${CFG.fbDefaultUrl}/teams/${team}/lbf.json`, {
+          method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(ST.lbfT[team])
         });
         if (!r.ok) throw new Error('HTTP ' + r.status);
       }
@@ -3789,6 +4057,7 @@
     document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
     document.getElementById(`tab-${tab}`).classList.add('active');
     document.querySelector(`[data-tab="${tab}"]`).classList.add('active');
+    updateTeamSelectorVisibility();
     if (tab==='fixture') { updateRefreshLabel(); _newsMarcarLeidas(); }
     if (tab==='galeria')                               renderGallery();
     if (tab==='asistencia')                            renderAtt();
@@ -3818,12 +4087,26 @@
     }
 
     document.getElementById('camp-id-inp').value = CFG.campId;
-    if (ST.fixture.length)   renderFixture();
-    if (ST.standings.length) renderStandings();
+
+    // Equipo por defecto: el del jugador si ya está en alguna LBF
+    TEAM_IDS.forEach(id => {
+      try {
+        const c = JSON.parse(localStorage.getItem('fixture_' + id) || '[]');
+        if (Array.isArray(c) && c.length) setTeamData('fixture', id, c);
+        const s = JSON.parse(localStorage.getItem('standings_' + id) || '[]');
+        if (Array.isArray(s) && s.length) setTeamData('standings', id, s);
+      } catch(_) {}
+    });
+    const mio = miEquipoPorLBF();
+    if (mio && !localStorage.getItem('team')) { ST.team = mio; syncTeamViews(); }
+    renderTeamSelector();
+    updateTeamSelectorVisibility();
+    renderFixture();
+    renderStandings();
 
     initFirebase();
 
-    await Promise.all([loadFixture(), loadStandings()]);
+    await Promise.all([loadFixture(), loadStandings(), loadTeamLeagueData()]);
     ST.lastFetch = Date.now();
     localStorage.setItem('lastFetch', ST.lastFetch);
     updateRefreshLabel();
