@@ -1,7 +1,7 @@
 {
   "name": "Los Disidentes",
   "short_name": "Disidentes",
-  "description": "App del equipo Los Disidentes · Quinta A · Liga Country Sur",
+  "description": "App del equipo Los Disidentes · Quinta A y Quinta B · Liga Country Sur",
   "start_url": "/app/",
   "scope": "/app/",
   "display": "standalone",
