@@ -2062,13 +2062,19 @@
       TEAM_IDS.forEach(id => {
         ST.fbDb.ref(tp('lbf', id)).on('value', s => {
           const d = _toArr(s.val());
-          if (id === LEGACY_TEAM && !d.length) return; // dejar que mande el fallback
+          if (id === LEGACY_TEAM) {
+            if (!d.length) return;   // vacía → sigue mandando la lista vieja
+            ST._lbfOwn5B = true;     // ya hay lista propia: la vieja pasa a ser respaldo
+            localStorage.setItem('lbf', JSON.stringify(d));
+          }
           setTeamData('lbf', id, d);
-          if (id === LEGACY_TEAM) localStorage.setItem('lbf', JSON.stringify(d));
           _afterLBFChange(id);
         });
         ST.fbDb.ref(tp('lbfLocked', id)).on('value', s => {
-          setTeamData('lbfLocked', id, !!s.val());
+          const v = s.val();
+          if (v === null) return;    // sin flag propio → que mande el viejo
+          if (id === LEGACY_TEAM) ST._lbfLockedOwn5B = true;
+          setTeamData('lbfLocked', id, !!v);
           if (id === ST.team && ST.activeTab === 'lbf') renderLBF();
         });
       });
