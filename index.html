@@ -169,6 +169,9 @@
     .seg button.on .mine { background: #8CE8B4; }
     @media (prefers-reduced-motion: reduce) { .seg-ind { transition: none; } }
 
+    /* ── FEE · etiqueta de equipo ────────────────── */
+    .fee-team { display: inline-block; margin-left: 8px; font-family: var(--serif); font-size: 0.55rem; font-weight: 700; letter-spacing: .6px; color: var(--muted); background: #F1F4F2; border-radius: 8px; padding: 2px 7px; vertical-align: middle; }
+
     /* ── ART. 9 · crédito de subidas ─────────────── */
     .a9 { display: inline-flex; align-items: center; gap: 6px; margin-left: 9px; vertical-align: middle; }
     .a9-cred { display: inline-flex; gap: 3px; }
@@ -3965,7 +3968,17 @@
       } catch(e2) {}
     }
 
-    const players = ST.lbf.map(p => p.name);
+    // El fee es del CLUB, no de la categoría: van los dos equipos juntos.
+    const equipoDe = {};
+    const players = [];
+    TEAM_IDS.forEach(id => {
+      (ST.lbfT[id] || []).forEach(p => {
+        if (!p || !p.name) return;
+        if (players.indexOf(p.name) !== -1) return;  // por si alguien figura en las dos
+        players.push(p.name);
+        equipoDe[p.name] = TEAMS[id].corto;
+      });
+    });
     if (!players.length) {
       wrap.innerHTML = '<div class="txs tmuted tcenter" style="padding:10px;">No hay jugadores en el equipo.</div>';
       return;
@@ -4005,7 +4018,7 @@
       }
 
       return `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--line);">
-        <span style="font-family:var(--sans);font-size:0.88rem;font-weight:700;color:var(--ink);">${fullName}</span>
+        <span style="font-family:var(--sans);font-size:0.88rem;font-weight:700;color:var(--ink);">${fullName}<span class="fee-team">${equipoDe[name] || ''}</span></span>
         ${statusCell}
       </div>`;
     }).join('');
