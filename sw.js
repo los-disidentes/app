@@ -1,5 +1,5 @@
-// Service Worker — Los Disidentes App v67
-const CACHE = 'disidentes-v67';
+// Service Worker — Los Disidentes App v68
+const CACHE = 'disidentes-v68';
 const PRECACHE = [
   '/app/',
   '/app/index.html',
@@ -29,7 +29,7 @@ self.addEventListener('activate', e => {
       .then(clients => {
         // Decirle a cada pestaña abierta que hay una nueva versión
         // El controllerchange en el cliente ya recarga automáticamente
-        clients.forEach(c => c.postMessage({ type: 'SW_UPDATED', version: '67' }));
+        clients.forEach(c => c.postMessage({ type: 'SW_UPDATED', version: '68' }));
       })
   );
 });
@@ -71,8 +71,8 @@ self.addEventListener('fetch', e => {
           .catch(() => cached || caches.match('/app/index.html'));
       }
       // Para archivos de liga (actualizados por GitHub Actions): network-first
-      if (url.pathname.startsWith('/app/fixture.json') ||
-          url.pathname.startsWith('/app/standings.json') ||
+      if (url.pathname.startsWith('/app/fixture') ||
+          url.pathname.startsWith('/app/standings') ||
           url.pathname.startsWith('/app/results/')) {
         return fetch(e.request)
           .then(resp => {
