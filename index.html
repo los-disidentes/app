@@ -169,6 +169,23 @@
     .seg button.on .mine { background: #8CE8B4; }
     @media (prefers-reduced-motion: reduce) { .seg-ind { transition: none; } }
 
+    .fee-informado { font-size: 0.72rem; font-weight: 700; color: #8A7420; background: #FBF6E4; border-radius: 9px; padding: 3px 9px; white-space: nowrap; }
+
+    /* ── FEE · aviso personal (solo lo ve el que debe) ── */
+    .fee-aviso { background: var(--paper); border: 1px solid #E7D2D8; border-left: 4px solid var(--bordo); border-radius: 0 var(--r) var(--r) 0; padding: 13px 15px; margin-bottom: 12px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; box-shadow: var(--shadow); }
+    .fee-aviso.urgente { border-left-width: 5px; background: #FDF8F9; }
+    .fee-aviso.informado { border-left-color: #C2AF6B; border-color: #EADFC0; background: #FDFBF4; }
+    .fa-txt { flex: 1; min-width: 190px; }
+    .fa-txt b { display: block; font-family: var(--serif); font-weight: 700; font-size: 0.88rem; color: var(--bordo); margin-bottom: 2px; }
+    .fee-aviso.informado .fa-txt b { color: #8A7420; }
+    .fa-txt span { font-size: 0.73rem; color: var(--muted); line-height: 1.45; }
+    .fa-acts { display: flex; gap: 7px; }
+    .fa-b1, .fa-b2 { border-radius: 10px; padding: 9px 13px; font-family: var(--serif); font-weight: 600; font-size: 0.75rem; cursor: pointer; white-space: nowrap; }
+    .fa-b1 { background: var(--paper); color: var(--bordo); border: 1.5px solid #E7D2D8; }
+    .fa-b2 { background: var(--bordo); color: #fff; border: none; }
+    .fa-b1:active, .fa-b2:active { transform: scale(.97); }
+    #badge-fee { background: var(--bordo); }
+
     /* ── FEE · etiqueta de equipo ────────────────── */
     .fee-team { display: inline-block; margin-left: 8px; font-family: var(--serif); font-size: 0.55rem; font-weight: 700; letter-spacing: .6px; color: var(--muted); background: #F1F4F2; border-radius: 8px; padding: 2px 7px; vertical-align: middle; }
 
@@ -702,6 +719,12 @@
         </ol>
       </div>
 
+      <!-- Jugador: avisar que ya pagó -->
+      <div id="fee-yapague-wrap" style="display:none;border-top:1px solid var(--line);padding-top:12px;">
+        <p style="font-size:0.75rem;color:var(--muted);font-family:var(--sans);margin-bottom:8px;line-height:1.5;">¿Ya lo pagaste? Avisá acá y queda registrado hasta que el admin lo vea acreditado.</p>
+        <button onclick="avisarPagoDesdeModal()" style="width:100%;background:var(--bordo);color:#fff;border:none;border-radius:10px;padding:11px;font-size:0.88rem;font-weight:700;cursor:pointer;font-family:var(--sans);">Ya pagué — avisar al admin</button>
+      </div>
+
       <!-- Sección admin -->
       <div id="fee-admin-confirm-wrap" style="display:none;border-top:1px solid var(--line);padding-top:12px;">
         <p style="font-size:0.75rem;color:var(--muted);font-family:var(--sans);margin-bottom:8px;line-height:1.5;">Confirmá el pago una vez que lo veas acreditado en la cuenta de Alfonso.</p>
@@ -736,7 +759,7 @@
     <button class="nav-btn"        data-tab="parejas"      onclick="switchTab('parejas')">      <span class="ni">🎾</span>Parejas</button>
     <button class="nav-btn"        data-tab="chat"         onclick="switchTab('chat')">         <span class="ni">💬</span>Chat<span class="nbadge hidden" id="badge-chat">0</span></button>
     <button class="nav-btn"        data-tab="rendimientos" onclick="switchTab('rendimientos')"> <span class="ni">📊</span>Stats</button>
-    <button class="nav-btn"        data-tab="lbf"          onclick="switchTab('lbf')">          <span class="ni">⚙️</span>LBF</button>
+    <button class="nav-btn"        data-tab="lbf"          onclick="switchTab('lbf')">          <span class="ni">⚙️</span>LBF<span class="nbadge hidden" id="badge-fee">$</span></button>
     <button class="nav-btn"        data-tab="galeria"      onclick="switchTab('galeria')">      <span class="ni">📷</span>Fotos</button>
   </nav>
 
@@ -748,6 +771,7 @@
   <!-- FIXTURE -->
   <section id="tab-fixture" class="tab active">
     <!-- Novedades: contenedor propio, independiente de renderFixture() -->
+    <div id="fee-aviso-wrap"></div>
     <div id="news-wrap"></div>
     <div id="next-match-wrap"><div class="tcenter" style="padding:28px"><span class="spin"></span></div></div>
     <div class="slabel">TABLA DE POSICIONES</div>
@@ -2135,6 +2159,7 @@
   function _afterLBFChange(team) {
     updateLBFDatalist();
     renderTeamSelector();
+    updateFeeBadge(); renderAvisoFee();
     if (team !== ST.team) return;
     if (ST.activeTab === 'lbf')        renderLBF();
     if (ST.activeTab === 'asistencia') renderAtt();
@@ -3992,6 +4017,7 @@
     const rows = players.map(name => {
       const key    = fbKey(name);
       const isPaid = pays[key]?.paid;
+      const isInformed = !isPaid && pays[key]?.informed;
       const paidAt = isPaid && pays[key].paidAt
         ? new Date(pays[key].paidAt).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit'})
         : null;
@@ -4007,11 +4033,18 @@
         } else {
           statusCell = `<span class="fee-status-paid">${label}</span>`;
         }
+      } else if (isInformed) {
+        // El jugador avisó que pagó: falta que el admin lo vea acreditado
+        if (ST.isAdmin) {
+          statusCell = `<span class="fee-informado">● Informado</span><button class="fee-pay-btn fee-action" style="margin-left:6px" data-fee-action="confirm" data-fee-name="${esc(name)}" data-fee-month="${curMonth}">Confirmar</button>`;
+        } else {
+          statusCell = `<span class="fee-informado">● Informado</span>`;
+        }
       } else {
         if (ST.isAdmin) {
           statusCell = `<button class="fee-pay-btn fee-action" data-fee-action="confirm" data-fee-name="${esc(name)}" data-fee-month="${curMonth}">💳 Confirmar</button>`;
         } else if (isSelf) {
-          statusCell = `<button class="fee-pay-btn fee-action" data-fee-action="modal" data-fee-name="${esc(name)}" data-fee-month="${curMonth}">💳 Ver cómo pagar</button>`;
+          statusCell = `<button class="fee-pay-btn fee-action" data-fee-action="yapague" data-fee-name="${esc(name)}" data-fee-month="${curMonth}">Ya pagué</button>`;
         } else {
           statusCell = `<span style="color:var(--muted);font-size:0.78rem;">Pendiente</span>`;
         }
@@ -4049,6 +4082,7 @@
       if (action === 'unpay')   toggleFeePayment(name, month, true);
       if (action === 'confirm') showFeeModal(name, month, false);
       if (action === 'modal')   showFeeModal(name, month, false);
+      if (action === 'yapague') showFeeModal(name, month, false);
     });
   }
 
@@ -4066,7 +4100,19 @@
         adminWrap.style.display = 'none';
       }
     }
+    // El jugador puede avisar que pagó (solo para sí mismo y si aún no está confirmado)
+    const yp = document.getElementById('fee-yapague-wrap');
+    if (yp) {
+      const esMio = ST.player && normalizeName(playerName) === normalizeName(ST.player);
+      const yaInformo = ((ST.paysAll || {})[yearMonth] || {})[fbKey(playerName)]?.informed;
+      yp.style.display = (esMio && !isPaid && !yaInformo) ? 'block' : 'none';
+    }
     document.getElementById('modal-fee-payment').classList.remove('hidden');
+  }
+
+  async function avisarPagoDesdeModal() {
+    await marcarQuePague(_feeModalPlayer, _feeModalMonth);
+    document.getElementById('modal-fee-payment').classList.add('hidden');
   }
 
   function copyCVU() {
@@ -4092,6 +4138,143 @@
     document.getElementById('modal-fee-payment').classList.add('hidden');
   }
 
+  // ═══════════════════════════════════════════
+  // FEE — estado propio y aviso personal
+  // ═══════════════════════════════════════════
+  // Tres estados: pagado (confirmado por un admin) · informado (el jugador avisó,
+  // falta que el admin lo vea acreditado) · pendiente. El estado "informado" evita
+  // que alguien quede marcado como deudor por una demora administrativa.
+  const FEE_DESDE = '2026-08';   // primer mes con fee. No se reclama nada anterior.
+  function mesActual() { return new Date().toISOString().slice(0,7); }
+  function nombreMes(ym) {
+    const M = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+    const [y,m] = String(ym).split('-');
+    return M[parseInt(m,10)-1] + (y !== mesActual().slice(0,4) ? ' ' + y : '');
+  }
+  // Todos los meses con fee, desde que arrancó hasta hoy
+  function mesesDelFee() {
+    const out = [], [y0,m0] = FEE_DESDE.split('-').map(Number);
+    const hoy = new Date(), yN = hoy.getFullYear(), mN = hoy.getMonth()+1;
+    let y = y0, m = m0;
+    while (y < yN || (y === yN && m <= mN)) {
+      out.push(y + '-' + String(m).padStart(2,'0'));
+      m++; if (m > 12) { m = 1; y++; }
+      if (out.length > 60) break;   // cota de seguridad
+    }
+    return out;
+  }
+
+  async function cargarPagos() {
+    try {
+      if (ST.fbOK && ST.fbDb) {
+        const s = await ST.fbDb.ref('payments').once('value');
+        ST.paysAll = s.val() || {};
+      } else {
+        ST.paysAll = await fetch(`${CFG.fbDefaultUrl}/payments.json`, { signal: _timeoutSignal(6000) })
+          .then(r => r.ok ? r.json() : null).catch(() => null) || {};
+      }
+    } catch(_) { ST.paysAll = ST.paysAll || {}; }
+    ST.pays = (ST.paysAll || {})[mesActual()] || {};   // compat: mes actual
+    updateFeeBadge();
+    renderAvisoFee();
+  }
+
+  function estaEnAlgunaLBF(nombre) {
+    return TEAM_IDS.some(id =>
+      (ST.lbfT[id] || []).some(p => p && normalizeName(p.name||'') === normalizeName(nombre)));
+  }
+
+  // Meses que el jugador todavía debe (ni pagados ni informados)
+  function mesesAdeudados(nombre) {
+    const quien = nombre || ST.player;
+    if (!quien || !estaEnAlgunaLBF(quien)) return [];
+    const key = fbKey(quien);
+    return mesesDelFee().filter(ym => {
+      const e = ((ST.paysAll || {})[ym] || {})[key];
+      return !(e && (e.paid || e.informed));
+    });
+  }
+
+  // 'paid' | 'informed' | 'due' | null (sin sesión o fuera de las LBF)
+  function miEstadoFee() {
+    if (!ST.player || !estaEnAlgunaLBF(ST.player)) return null;
+    if (mesesAdeudados().length) return 'due';
+    const e = ((ST.paysAll || {})[mesActual()] || {})[fbKey(ST.player)];
+    return (e && e.paid) ? 'paid' : 'informed';
+  }
+
+  function updateFeeBadge() {
+    const b = document.getElementById('badge-fee');
+    if (!b) return;
+    const st = miEstadoFee();
+    b.classList.toggle('hidden', st !== 'due');
+  }
+
+  // Aviso en la portada — SOLO lo ve el que debe. El resto no ve nada.
+  function renderAvisoFee() {
+    const w = document.getElementById('fee-aviso-wrap');
+    if (!w) return;
+    const st = miEstadoFee();
+    if (st === 'due') {
+      const deb = mesesAdeudados();
+      const uno = deb.length === 1;
+      const titulo = uno
+        ? `Te falta el fee de ${nombreMes(deb[0])}`
+        : `Te faltan ${deb.length} meses del fee`;
+      const detalle = uno
+        ? '$20.000 para la capitanía. Se paga por Mercado Pago o transferencia.'
+        : `${deb.map(nombreMes).join(', ')} · $${(20000*deb.length).toLocaleString('es-AR')} en total.`;
+      w.innerHTML = `
+        <div class="fee-aviso${deb.length >= 2 ? ' urgente' : ''}">
+          <div class="fa-txt">
+            <b>${titulo}</b>
+            <span>${detalle}</span>
+          </div>
+          <div class="fa-acts">
+            <button class="fa-b1" onclick="switchTab('lbf'); setTimeout(()=>{ if(typeof toggleFeeCard==='function' && !_feeCardLoaded) toggleFeeCard(); }, 300)">Cómo pagar</button>
+            <button class="fa-b2" onclick="marcarQuePague()">Ya pagué</button>
+          </div>
+        </div>`;
+    } else if (st === 'informed') {
+      w.innerHTML = `
+        <div class="fee-aviso informado">
+          <div class="fa-txt">
+            <b>Avisaste que pagaste</b>
+            <span>Queda pendiente de confirmación. Cuando el admin lo vea acreditado, listo.</span>
+          </div>
+        </div>`;
+    } else {
+      w.innerHTML = '';
+    }
+  }
+
+  // El jugador avisa que pagó. NO marca el pago: solo lo deja en ámbar.
+  async function marcarQuePague(nombre, mesForzado) {
+    const quien = nombre || ST.player;
+    if (!quien) { toast('Iniciá sesión primero'); return; }
+    if (quien !== ST.player && !ST.isAdmin) return;
+    const deb = mesesAdeudados(quien);
+    const mes = mesForzado || deb[0] || mesActual();   // el más viejo primero
+    const key = fbKey(quien);
+    const data = { informed: true, informedAt: new Date().toISOString() };
+    try {
+      if (ST.fbOK && ST.fbDb) await ST.fbDb.ref(`payments/${mes}/${key}`).update(data);
+      else {
+        const r = await fetch(`${CFG.fbDefaultUrl}/payments/${mes}/${key}.json`, {
+          method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+      }
+    } catch(e) { console.error('marcarQuePague:', e); toast('⚠️ No se pudo avisar. Probá de nuevo.'); return; }
+    ST.paysAll = ST.paysAll || {};
+    ST.paysAll[mes] = ST.paysAll[mes] || {};
+    ST.paysAll[mes][key] = Object.assign({}, ST.paysAll[mes][key], data);
+    ST.pays = ST.paysAll[mesActual()] || {};
+    toast('🎾 Listo, avisamos. Falta que el admin lo confirme.');
+    updateFeeBadge(); renderAvisoFee();
+    _feeCardLoaded = false;
+    if (ST.activeTab === 'lbf') loadFeeCard();
+  }
+
   async function toggleFeePayment(playerName, yearMonth, currentlyPaid) {
     if (!ST.isAdmin || !ST.fbDb) { toast('Solo el admin puede confirmar pagos'); return; }
     const key  = fbKey(playerName);
@@ -4100,10 +4283,11 @@
       await ST.fbDb.ref(path).remove();
       toast('↩️ Pago desmarcado');
     } else {
-      await ST.fbDb.ref(path).set({ paid: true, paidAt: new Date().toISOString(), confirmedBy: ST.player });
+      await ST.fbDb.ref(path).set({ paid: true, paidAt: new Date().toISOString(), confirmedBy: ST.player, informed: null });
       toast(`✅ Pago de ${playerName} confirmado`);
     }
-    // Recargar fee card
+    // Recargar fee card + aviso personal
+    await cargarPagos();
     _feeCardLoaded = false;
     loadFeeCard();
   }
@@ -4210,6 +4394,7 @@
     renderStandings();
 
     initFirebase();
+    cargarPagos();
 
     await Promise.all([loadFixture(), loadStandings(), loadTeamLeagueData()]);
     ST.lastFetch = Date.now();
