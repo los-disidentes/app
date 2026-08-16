@@ -189,6 +189,19 @@
     /* ── FEE · etiqueta de equipo ────────────────── */
     .fee-team { display: inline-block; margin-left: 8px; font-family: var(--serif); font-size: 0.55rem; font-weight: 700; letter-spacing: .6px; color: var(--muted); background: #F1F4F2; border-radius: 8px; padding: 2px 7px; vertical-align: middle; }
 
+    /* ── PASE 5ta B → 5ta A ──────────────────────── */
+    .pase-warn { display: flex; flex-direction: column; gap: 2px; padding: 11px 13px; border-radius: 12px; font-size: 0.74rem; line-height: 1.45; }
+    .pase-warn b { font-family: var(--serif); font-weight: 700; font-size: 0.79rem; }
+    .pase-warn.i { background: var(--mint); color: #33513F; }
+    .pase-warn.w { background: #F7EBEE; color: var(--bordo); }
+    .pase-row { display: flex; align-items: center; gap: 9px; padding: 10px 4px; border-bottom: 1px solid var(--line); }
+    .pase-row:last-child { border-bottom: none; }
+    .pase-row.ya { background: var(--mint); border-radius: 10px; padding-left: 9px; padding-right: 9px; }
+    .pase-nm { flex: 1; font-size: 0.82rem; font-weight: 700; color: var(--ink); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .pase-btn { background: var(--green); color: #fff; border: none; border-radius: 9px; padding: 6px 12px; font-family: var(--serif); font-weight: 600; font-size: 0.72rem; cursor: pointer; white-space: nowrap; }
+    .pase-btn.quitar { background: #fff; color: var(--bordo); border: 1.5px solid #E7D2D8; }
+    .pase-bloq { font-size: 0.68rem; font-weight: 700; color: var(--muted); background: #F0F2F1; border-radius: 9px; padding: 4px 9px; white-space: nowrap; }
+
     /* ── ART. 9 · crédito de subidas ─────────────── */
     .a9 { display: inline-flex; align-items: center; gap: 6px; margin-left: 9px; vertical-align: middle; }
     .a9-cred { display: inline-flex; gap: 3px; }
@@ -729,6 +742,24 @@
       <div id="fee-admin-confirm-wrap" style="display:none;border-top:1px solid var(--line);padding-top:12px;">
         <p style="font-size:0.75rem;color:var(--muted);font-family:var(--sans);margin-bottom:8px;line-height:1.5;">Confirmá el pago una vez que lo veas acreditado en la cuenta de Alfonso.</p>
         <button id="fee-confirm-btn" onclick="confirmFeeFromModal()" style="width:100%;background:var(--green);color:#fff;border:none;border-radius:10px;padding:11px;font-size:0.88rem;font-weight:700;cursor:pointer;font-family:var(--sans);">✅ Confirmar pago recibido</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Panel de pase 5ta B → 5ta A -->
+  <div id="modal-pase" class="modal-ov hidden" onclick="if(event.target===this)cerrarPanelPase()">
+    <div class="modal-box" style="max-width:460px;">
+      <div class="flex" style="justify-content:space-between;align-items:center;margin-bottom:4px;">
+        <h3 style="font-family:var(--serif);font-size:1.05rem;color:var(--green-dk);">Subir de 5ta B</h3>
+        <button onclick="cerrarPanelPase()" style="border:none;background:none;font-size:1.3rem;color:var(--muted);cursor:pointer;line-height:1;">×</button>
+      </div>
+      <p class="txs tmuted" style="margin-bottom:12px;line-height:1.5;">
+        Las pelotitas muestran el crédito del Art. 9: cada uno puede jugar 2 partidos acá arriba sin quedar clasificado.
+      </p>
+      <div id="pase-jornada" class="pase-warn i"></div>
+      <div id="pase-lista" style="margin-top:12px;max-height:46vh;overflow-y:auto;"></div>
+      <div class="note" style="margin-top:12px;font-size:0.72rem;">
+        El que sube entra al final de la lista de 5ta A (Art. 2.11), así que lo más probable es que le toque el <b>Doble 3</b>.
       </div>
     </div>
   </div>
@@ -2615,6 +2646,129 @@
   // ═══════════════════════════════════════════
   // RENDER: ATTENDANCE
   // ═══════════════════════════════════════════
+  // ═══════════════════════════════════════════
+  // PASE — subir un jugador de 5ta B a 5ta A por una fecha
+  // ═══════════════════════════════════════════
+  // El pase se guarda como una asistencia de 5ta A con la marca `subido`.
+  // Así no hace falta una colección nueva y el jugador entra en el armado.
+  // El crédito del Art. 9 NO se descuenta acá: se descuenta cuando la formación
+  // queda confirmada con él adentro, porque lo que cuenta es haber jugado.
+  function esSubido(nombre) {
+    const e = ST.attendance[nombre];
+    return !!(e && e.subido);
+  }
+  function subidosConfirmados() {
+    return Object.entries(ST.attendance)
+      .filter(([,v]) => v && v.subido && v.status === 'confirmed')
+      .map(([k]) => k)
+      .sort((a,b) => posEnLBF(a,'5B') - posEnLBF(b,'5B'));   // Art. 2.11: entre ellos, orden de su categoría
+  }
+  function posEnLBF(nombre, team) {
+    const i = (ST.lbfT[team] || []).findIndex(p => p && normalizeName(p.name||'') === normalizeName(nombre));
+    return i < 0 ? 999 : i;
+  }
+
+  // ¿Se pueden jugar los dos partidos del mismo día?
+  const DUR_PARTIDO = 150, VIAJE = 35;
+  function _min(h) { const m = String(h||'').match(/^(\d{1,2}):(\d{2})/); return m ? (+m[1])*60 + (+m[2]) : null; }
+  function compatJornada(nmA) {
+    const mB = (ST.fixT['5B'] || []).find(m => m.fecha === nmA.fecha);
+    if (!mB) return { estado:'libre', txt:'5ta B no juega ese día. Sin conflicto.' };
+    const a = _min(nmA.hora), b = _min(mB.hora);
+    if (a === null || b === null)
+      return { estado:'sinhora', otro:mB,
+        txt:'Los dos equipos juegan ese día, pero la Liga todavía no publicó los horarios. Si es el mismo turno, no va a poder jugar los dos.' };
+    const hueco = Math.abs(b - a);
+    const viaje = (nmA.home !== mB.home);
+    const nec = DUR_PARTIDO + (viaje ? VIAJE : 0);
+    if (hueco === 0) return { estado:'choque', otro:mB, txt:'Los dos equipos juegan a la misma hora: si sube, se pierde el partido de 5ta B.' };
+    if (hueco < nec)  return { estado:'justo', otro:mB, hueco, nec,
+      txt:`Hay ${hueco} minutos entre partidos y hacen falta cerca de ${nec}. Si el primero se estira llega tarde al segundo (Art. 18: 15 min de tolerancia).` };
+    return { estado:'ok', otro:mB, hueco, txt:`Puede jugar los dos: ${nmA.hora} en 5ta A y ${mB.hora} en 5ta B.` };
+  }
+
+  // Candidatos de 5ta B para subir a la fecha de 5ta A
+  function candidatosParaSubir() {
+    return (ST.lbfT['5B'] || []).filter(p => p && p.active !== false).map(p => {
+      const e = estadoArt9(p.name);
+      const yaSubido = esSubido(p.name);
+      let bloqueo = null;
+      if (e.tipo === 'clasificado') bloqueo = 'Ya está clasificado en 5ta A.';
+      else if (e.tipo === 'sincredito') bloqueo = null;   // se permite, con aviso fuerte
+      return { name: p.name, art9: e, yaSubido, bloqueo };
+    });
+  }
+
+  function abrirPanelPase() {
+    const nm = nextMatch();
+    if (!nm) { toast('No hay próxima fecha'); return; }
+    if (ST.team !== '5A') { toast('El pase se hace desde 5ta A'); return; }
+    const c = compatJornada(nm);
+    const cand = candidatosParaSubir();
+    const clase = { ok:'i', libre:'i', sinhora:'w', justo:'w', choque:'w' }[c.estado] || 'i';
+    document.getElementById('pase-jornada').className = 'pase-warn ' + clase;
+    document.getElementById('pase-jornada').innerHTML = `<b>${{
+      ok:'Se pueden jugar los dos', libre:'5ta B no juega ese día',
+      sinhora:'Falta el horario de la Liga', justo:'Los partidos se superponen',
+      choque:'Chocan los horarios' }[c.estado]}</b>${c.txt}`;
+    document.getElementById('pase-lista').innerHTML = cand.map(x => `
+      <div class="pase-row${x.yaSubido?' ya':''}">
+        <span class="pase-nm">${esc(x.name)}</span>
+        ${badgeArt9(x.name)}
+        ${x.yaSubido
+          ? `<button class="pase-btn quitar" onclick="bajarSubido('${esc(x.name).replace(/'/g,"\\'")}')">Quitar</button>`
+          : x.bloqueo
+            ? `<span class="pase-bloq" title="${esc(x.bloqueo)}">No puede</span>`
+            : `<button class="pase-btn" onclick="subirJugador('${esc(x.name).replace(/'/g,"\\'")}')">Subir</button>`}
+      </div>`).join('') || '<div class="tmuted tsm tcenter" style="padding:12px">No hay jugadores en la LBF de 5ta B.</div>';
+    document.getElementById('modal-pase').classList.remove('hidden');
+  }
+  function cerrarPanelPase(){ document.getElementById('modal-pase').classList.add('hidden'); }
+
+  async function subirJugador(nombre) {
+    if (!ST.isAdmin) { toast('Solo el capitán puede subir jugadores'); return; }
+    const nm = nextMatch(); if (!nm) return;
+    const e = estadoArt9(nombre);
+    if (e.tipo === 'clasificado') { toast('⚠️ ' + e.det, 5000); return; }
+    let msg = `¿Subir a ${nombre} a 5ta A para la fecha ${nm.rueda}?\n\n`;
+    msg += e.tipo === 'sincredito'
+      ? '⚠️ Ya usó sus 2 partidos. Si juega este tercero queda CLASIFICADO en 5ta A y no puede jugar más en 5ta B este torneo (Art. 9.2).\n\n'
+      : `Le quedan ${2 - e.usadas} de 2 subidas.\n\n`;
+    msg += 'Por Art. 2.11 entra al final de la lista de 5ta A, así que probablemente juegue el Doble 3.\n\n';
+    msg += compatJornada(nm).txt;
+    if (!confirm(msg)) return;
+    const data = { status:'confirmed', ts:Date.now(), player:nombre, subido:true, from:'5B', by:ST.player };
+    try {
+      if (ST.fbOK && ST.fbDb) await ST.fbDb.ref(tp(`attendance/${nm.id}/${fbKey(nombre)}`, '5A')).set(data);
+      else {
+        const r = await fetch(`${CFG.fbDefaultUrl}/teams/5A/attendance/${encodeURIComponent(nm.id)}/${fbKey(nombre)}.json`, {
+          method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(data) });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        ST.attT['5A'][nombre] = data;
+      }
+    } catch(err) { console.error('subirJugador:', err); toast('⚠️ No se pudo subir. Probá de nuevo.'); return; }
+    toast(`🎾 ${nombre} sube a 5ta A por esta fecha`);
+    renderAtt(); renderParejas();
+    if (!document.getElementById('modal-pase').classList.contains('hidden')) abrirPanelPase();
+  }
+
+  async function bajarSubido(nombre) {
+    if (!ST.isAdmin) return;
+    const nm = nextMatch(); if (!nm) return;
+    if (!confirm(`¿Sacar a ${nombre} de la fecha de 5ta A?`)) return;
+    try {
+      if (ST.fbOK && ST.fbDb) await ST.fbDb.ref(tp(`attendance/${nm.id}/${fbKey(nombre)}`, '5A')).remove();
+      else {
+        const r = await fetch(`${CFG.fbDefaultUrl}/teams/5A/attendance/${encodeURIComponent(nm.id)}/${fbKey(nombre)}.json`, { method:'DELETE' });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        delete ST.attT['5A'][nombre];
+      }
+    } catch(err) { console.error('bajarSubido:', err); toast('⚠️ No se pudo quitar'); return; }
+    toast(`${nombre} vuelve a 5ta B`);
+    renderAtt(); renderParejas();
+    if (!document.getElementById('modal-pase').classList.contains('hidden')) abrirPanelPase();
+  }
+
   function renderAtt() {
     const wrap=document.getElementById('att-content'),nm=nextMatch();
     if(!wrap) return;
@@ -2651,6 +2805,25 @@
           </div>
         </div>`:''}
       ${locked?'<div class="lock-banner">🔒 Asistencia cerrada. Ver Parejas para la formación.</div>':''}
+      ${(ST.isAdmin && ST.team==='5A' && !locked) ? `
+        <div class="card" style="margin-bottom:12px;">
+          <div class="card-title" style="margin-bottom:8px;">🎾 Refuerzos de 5ta B</div>
+          <div class="txs tmuted" style="margin-bottom:10px;line-height:1.5;">
+            Cada jugador de 5ta B puede jugar hasta <b>2 partidos</b> en 5ta A sin quedar clasificado (Art. 9.1).
+          </div>
+          <button class="btn btn-p btn-sm w100" onclick="abrirPanelPase()">Subir un jugador por esta fecha</button>
+        </div>` : ''}
+      ${subidosConfirmados().length ? `
+        <div class="card" style="margin-bottom:12px;">
+          <div class="card-title" style="margin-bottom:8px;">Suben de 5ta B</div>
+          ${subidosConfirmados().map(n => `
+            <div class="prow">
+              <div class="pnum" style="background:var(--bordo)">↑</div>
+              <div class="pname flex1">${esc(n)}</div>
+              ${badgeArt9(n)}
+              ${ST.isAdmin && !locked ? `<button class="pase-btn quitar" onclick="bajarSubido('${'$'}{esc(n).replace(/'/g,"\\'")}')">Quitar</button>` : ''}
+            </div>`).join('')}
+        </div>` : ''}
       <div class="card">
         <div class="card-title">Lista del equipo</div>
         ${!active.length
@@ -2714,7 +2887,12 @@
     if(!ST.fixture.length){ wrap.innerHTML = esperandoLiga('<p class="wl-hist">El simulador de formaciones sigue disponible más abajo.</p>'); return; }
     if(!nm){wrap.innerHTML='<div class="empty"><div class="ei">📅</div><h3>Sin partidos</h3></div>';return;}
     const confNames=Object.entries(ST.attendance).filter(([,v])=>v.status==='confirmed').map(([k])=>k);
-    const confirmed=ST.lbf.filter(p=>p.active&&confNames.includes(p.name)).map((p,i)=>({name:p.name,lbfPos:p.lbfPosition||(i+1),mn:i+1}));
+    // Presentes de la LBF propia, renumerados 1..N por orden de lista (Art. 19)
+    const _propios=ST.lbf.filter(p=>p.active&&confNames.includes(p.name)).map((p,i)=>({name:p.name,lbfPos:p.lbfPosition||(i+1),mn:i+1}));
+    // Art. 2.11: los que suben entran a continuación del último número de orden,
+    // y entre ellos respetan el orden de la categoría de la que vienen.
+    const _subidos=subidosConfirmados().map((n,j)=>({name:n,lbfPos:900+j,mn:_propios.length+j+1,subido:true}));
+    const confirmed=_propios.concat(_subidos);
     if(ST.formation?.locked){
       const f=ST.formation;
       wrap.innerHTML=`
