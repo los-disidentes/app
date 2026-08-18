@@ -2560,7 +2560,9 @@
       return {...courts, perf};
     });
     formations.sort((a,b)=>b.perf-a.perf);
-    return formations.slice(0,count);
+    // Mismo criterio que el simulador: si todas empatan (sin partidos jugados),
+    // repartir por compañero del nº1 en vez de cortar el orden de generación.
+    return _repartirEmpatadas(formations, count);
   }
 
   function getPairHist(n1,n2) {
@@ -3518,39 +3520,46 @@
 
     mejorPorConjunto.sort((x, y) => y.perf - x.perf);
 
-    // Si el tope está empatado (pasa siempre mientras no haya partidos jugados),
-    // NO tomar los primeros N: se generan en orden lexicográfico y todos comparten
-    // el prefijo {1,2,3,4,5}, así que los últimos de la lista no aparecían nunca.
-    // Tomamos una muestra repartida para que todos los marcados tengan chance.
-    const mejorPerf = mejorPorConjunto[0].perf;
-    const empatadas = mejorPorConjunto.filter(f => f.perf === mejorPerf);
-    if (empatadas.length > topN) {
-      // Repartir por PATRÓN de numeración (1-2/3-4/5-6, 1-6/2-5/3-4, …).
-      // Con una muestra "cada N" salían todas con el mismo patrón, porque las
-      // particiones se generan agrupadas. Round-robin entre patrones garantiza
-      // que se vean pareos distintos, incluido el primero con el último.
-      const porPatron = new Map();
-      empatadas.forEach(f => {
-        const k = _companeroDel1(f);
-        if (!porPatron.has(k)) porPatron.set(k, []);
-        porPatron.get(k).push(f);
-      });
-      // Ordenar los baldes por compañero del 1 (2, 3, 4, 5, 6…) para que la
-      // primera vuelta muestre justamente todas las parejas posibles del 1.
-      const baldes = [...porPatron.entries()].sort((a,b) => a[0]-b[0]).map(e => e[1]);
-      // Dentro de cada balde, variar también el resto del pareo
-      baldes.forEach(b => b.sort((x,y) => _patronFormacion(x) < _patronFormacion(y) ? -1 : 1));
-      const out = [];
-      for (let ronda = 0; out.length < topN; ronda++) {
-        let sumo = false;
-        for (const b of baldes) {
-          if (b[ronda]) { out.push(b[ronda]); sumo = true; if (out.length === topN) break; }
-        }
-        if (!sumo) break;   // no queda nada por repartir
+    return _repartirEmpatadas(mejorPorConjunto, topN);
+  }
+
+  // Elige las topN formaciones de una lista YA ordenada por perf (desc).
+  //
+  // El problema que resuelve: mientras no haya partidos jugados cargados, TODAS
+  // las formaciones empatan en puntaje. El sort no reordena nada, así que quedaba
+  // el orden crudo de generación — que es lexicográfico y arranca siempre con el
+  // 1+2. Resultado: el capitán nunca veía al nº1 con el último de la lista.
+  //
+  // Cuando el tope está empatado repartimos por COMPAÑERO DEL Nº1, que es el
+  // criterio que más cambia una formación y el que el capitán quiere comparar.
+  // Round-robin entre baldes ⇒ la primera vuelta muestra al 1 con el 2, con el 3,
+  // … y con el último. Si hay historial real, los perf difieren y esto no se
+  // activa: manda el ranking, como corresponde.
+  function _repartirEmpatadas(ordenadas, topN) {
+    if (!ordenadas || !ordenadas.length) return [];
+    const mejorPerf = ordenadas[0].perf;
+    const empatadas = ordenadas.filter(f => f.perf === mejorPerf);
+    if (empatadas.length <= topN) return ordenadas.slice(0, topN);
+
+    const porCompanero = new Map();
+    empatadas.forEach(f => {
+      const k = _companeroDel1(f);
+      if (!porCompanero.has(k)) porCompanero.set(k, []);
+      porCompanero.get(k).push(f);
+    });
+    const baldes = [...porCompanero.entries()].sort((a, b) => a[0] - b[0]).map(e => e[1]);
+    // Dentro de cada balde, variar también el resto del pareo
+    baldes.forEach(b => b.sort((x, y) => _patronFormacion(x) < _patronFormacion(y) ? -1 : 1));
+
+    const out = [];
+    for (let ronda = 0; out.length < topN; ronda++) {
+      let sumo = false;
+      for (const b of baldes) {
+        if (b[ronda]) { out.push(b[ronda]); sumo = true; if (out.length === topN) break; }
       }
-      return out;
+      if (!sumo) break;   // no queda nada por repartir
     }
-    return mejorPorConjunto.slice(0, topN);
+    return out;
   }
 
   // Firma del pareo por números de orden: "1-2|3-4|5-6"
