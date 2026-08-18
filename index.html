@@ -189,6 +189,14 @@
     /* ── FEE · etiqueta de equipo ────────────────── */
     .fee-team { display: inline-block; margin-left: 8px; font-family: var(--serif); font-size: 0.55rem; font-weight: 700; letter-spacing: .6px; color: var(--muted); background: #F1F4F2; border-radius: 8px; padding: 2px 7px; vertical-align: middle; }
 
+    /* ── ARMADO MANUAL ───────────────────────────── */
+    .man-row { display: flex; align-items: center; gap: 7px; margin-bottom: 8px; }
+    .man-lbl { font-family: var(--serif); font-weight: 700; font-size: 0.7rem; color: var(--bordo); min-width: 62px; }
+    .man-sel { flex: 1; min-width: 0; border: 1.5px solid var(--line); border-radius: 9px; padding: 8px 9px; font-family: var(--sans); font-size: 0.76rem; background: var(--paper); color: var(--ink); }
+    .man-sel:focus { outline: none; border-color: var(--green); }
+    .man-warn { background: #F7EBEE; color: var(--bordo); border-radius: 10px; padding: 10px 12px; font-size: 0.75rem; line-height: 1.45; }
+    .man-info { background: var(--mint); color: #33513F; border-radius: 10px; padding: 10px 12px; font-size: 0.73rem; line-height: 1.45; }
+
     /* ── PASE 5ta B → 5ta A ──────────────────────── */
     .pase-warn { display: flex; flex-direction: column; gap: 2px; padding: 11px 13px; border-radius: 12px; font-size: 0.74rem; line-height: 1.45; }
     .pase-warn b { font-family: var(--serif); font-weight: 700; font-size: 0.79rem; }
@@ -1084,6 +1092,29 @@
 
   function isTeam(t) { return TEAM_IDS.indexOf(t) !== -1; }
 
+  // ── Capitanes por equipo ───────────────────────────────────────────
+  // config/captains/{playerKey} = '5A' | '5B' | 'ALL'
+  // Retrocompatible: mientras nadie esté asignado, todos los admins pueden
+  // gestionar los dos equipos, exactamente como venía funcionando.
+  // El Art. 19 hace firmar la planilla al capitán y el Art. 16.1 le carga a él
+  // la sanción si la formación está mal: conviene que haya un responsable.
+  ST.captains = {};
+  function hayCapitanesAsignados() { return Object.keys(ST.captains || {}).length > 0; }
+  function esCapitan(team) {
+    if (!ST.isAdmin) return false;
+    if (ST.isSuperAdmin) return true;
+    if (!hayCapitanesAsignados()) return true;      // nadie asignó nada todavía
+    const c = ST.captains[fbKey(ST.player || '')];
+    if (!c) return false;
+    return c === 'ALL' || c === (team || ST.team);
+  }
+  function capitanDe(team) {
+    const k = Object.keys(ST.captains || {}).find(x => ST.captains[x] === team);
+    if (!k) return null;
+    const p = (ST.lbfT['5A'] || []).concat(ST.lbfT['5B'] || []).find(q => q && fbKey(q.name) === k);
+    return p ? p.name : k.replace(/_/g, ' ');
+  }
+
   // Estado por equipo. ST.lbf / ST.attendance / … son "vistas vivas" del equipo
   // activo, para que todo el render existente siga funcionando sin cambios.
   ST.team    = isTeam(localStorage.getItem('team')) ? localStorage.getItem('team') : DEFAULT_TEAM;
@@ -1565,6 +1596,12 @@
       } catch(_) {}
     }
 
+    // Capitanes por equipo
+    try {
+      const rc = await fetch(`${BASE}/config/captains.json`);
+      if (rc.ok) ST.captains = (await rc.json()) || {};
+    } catch(_) {}
+
     // Config / lbfLocked (ruta vieja → sólo si 5ta B no tiene flag propio)
     try {
       if (ST._lbfLockedOwn5B) throw new Error('skip');
@@ -1802,7 +1839,33 @@
       return;
     }
 
-    wrap.innerHTML = `
+    // Panel de capitanes: solo el superAdmin reparte los equipos
+    const adminKeys = Object.keys(admins).filter(k => admins[k]);
+    const capPanel = ST.isSuperAdmin && adminKeys.length ? `
+      <div class="card" style="margin-bottom:14px;">
+        <div class="card-title" style="margin-bottom:6px;">🎾 Capitanes por equipo</div>
+        <div class="txs tmuted" style="margin-bottom:10px;line-height:1.5;">
+          Quién puede armar la formación, cerrar la LBF y subir refuerzos de cada equipo.
+          ${hayCapitanesAsignados() ? '' : '<b>Mientras no asignes a nadie, todos los admins pueden gestionar los dos equipos.</b>'}
+        </div>
+        ${adminKeys.map(k => {
+          const nom = (players[k] && players[k].name) || k.replace(/_/g,' ');
+          const val = ST.captains[k] || '';
+          return `<div class="man-row">
+            <span class="man-lbl" style="min-width:0;flex:1;color:var(--ink);font-size:0.78rem;">${esc(nom)}</span>
+            <select class="man-sel" style="flex:0 0 128px;" onchange="setCapitan('${k}', this.value)">
+              <option value=""${val===''?' selected':''}>Sin asignar</option>
+              <option value="5A"${val==='5A'?' selected':''}>Solo 5ta A</option>
+              <option value="5B"${val==='5B'?' selected':''}>Solo 5ta B</option>
+              <option value="ALL"${val==='ALL'?' selected':''}>Los dos</option>
+            </select>
+          </div>`; }).join('')}
+        <div class="txs tmuted" style="margin-top:8px;line-height:1.5;">
+          Vos, como superAdmin, seguís viendo y pudiendo todo.
+        </div>
+      </div>` : '';
+
+    wrap.innerHTML = capPanel + `
       <div class="txs tmuted" style="margin-bottom:10px;">${entries.length} jugadores registrados</div>
       ${entries.map(([key, p]) => {
         const isAdm = !!admins[key];
@@ -1840,6 +1903,24 @@
       if (action === 'removeadmin')  adminToggleAdmin(pname, pkey, false);
       if (action === 'removeplayer') adminRemovePlayer(pname, pkey);
     });  // sin { once: true } — el listener persiste hasta que se re-renderice el panel
+  }
+
+  async function setCapitan(playerKey, valor) {
+    if (!ST.isSuperAdmin) { toast('Solo el superAdmin asigna capitanes'); return; }
+    try {
+      if (ST.fbOK && ST.fbDb) {
+        await ST.fbDb.ref(`config/captains/${playerKey}`).set(valor || null);
+      } else {
+        const r = await fetch(`${CFG.fbDefaultUrl}/config/captains/${playerKey}.json`,
+          valor ? { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(valor) }
+                : { method:'DELETE' });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+      }
+    } catch(e) { console.error('setCapitan:', e); toast('⚠️ No se pudo guardar'); return; }
+    if (valor) ST.captains[playerKey] = valor; else delete ST.captains[playerKey];
+    const nom = playerKey.replace(/_/g,' ');
+    toast(valor ? `✅ ${nom} → ${valor==='ALL'?'los dos equipos':(valor==='5A'?'5ta A':'5ta B')}` : `${nom} sin equipo asignado`);
+    applyAdminUI();
   }
 
   async function adminToggleAdmin(name, key, makeAdmin) {
@@ -2162,6 +2243,13 @@
       ST.fbDb.ref('news').limitToLast(30).on('value', s => {
         _news = s.val() || {};
         renderNews();
+      });
+      ST.fbDb.ref('config/captains').on('value', s => {
+        ST.captains = s.val() || {};
+        applyAdminUI();
+        if (ST.activeTab === 'parejas')    renderParejas();
+        if (ST.activeTab === 'asistencia') renderAtt();
+        if (ST.activeTab === 'lbf')        renderLBF();
       });
       ST.fbDb.ref('config/lbfLocked').on('value', s => {
         // Cierre viejo → aplica a 5ta B mientras no tenga su propio flag
@@ -2700,6 +2788,7 @@
   }
 
   function abrirPanelPase() {
+    if (!esCapitan('5A')) { toast('Solo el capitán de 5ta A'); return; }
     const nm = nextMatch();
     if (!nm) { toast('No hay próxima fecha'); return; }
     if (ST.team !== '5A') { toast('El pase se hace desde 5ta A'); return; }
@@ -2726,7 +2815,7 @@
   function cerrarPanelPase(){ document.getElementById('modal-pase').classList.add('hidden'); }
 
   async function subirJugador(nombre) {
-    if (!ST.isAdmin) { toast('Solo el capitán puede subir jugadores'); return; }
+    if (!esCapitan('5A')) { toast('Solo el capitán de 5ta A puede subir jugadores'); return; }
     const nm = nextMatch(); if (!nm) return;
     const e = estadoArt9(nombre);
     if (e.tipo === 'clasificado') { toast('⚠️ ' + e.det, 5000); return; }
@@ -2753,7 +2842,7 @@
   }
 
   async function bajarSubido(nombre) {
-    if (!ST.isAdmin) return;
+    if (!esCapitan('5A')) return;
     const nm = nextMatch(); if (!nm) return;
     if (!confirm(`¿Sacar a ${nombre} de la fecha de 5ta A?`)) return;
     try {
@@ -2805,7 +2894,7 @@
           </div>
         </div>`:''}
       ${locked?'<div class="lock-banner">🔒 Asistencia cerrada. Ver Parejas para la formación.</div>':''}
-      ${(ST.isAdmin && ST.team==='5A' && !locked) ? `
+      ${(esCapitan('5A') && ST.team==='5A' && !locked) ? `
         <div class="card" style="margin-bottom:12px;">
           <div class="card-title" style="margin-bottom:8px;">🎾 Refuerzos de 5ta B</div>
           <div class="txs tmuted" style="margin-bottom:10px;line-height:1.5;">
@@ -2930,6 +3019,14 @@
         ${confirmed.map(p=>`<div class="prow"><div class="pnum">${p.mn}</div><div class="pname flex1">${p.name}</div></div>`).join('')}
         ${confirmed.length>6?`<div class="txs tgrape mt8">⚠️ ${confirmed.length} confirmados — el capitán elige 6.</div>`:''}
       </div>
+      ${esCapitan() ? `
+        <div class="card" id="manual-card">
+          <div class="flex" style="justify-content:space-between;align-items:center;">
+            <div class="card-title" style="margin:0;">✍️ Armar a mano</div>
+            <button class="btn btn-s btn-sm" onclick="toggleManual()" id="manual-toggle">Abrir</button>
+          </div>
+          <div id="manual-body" style="display:none;margin-top:12px;"></div>
+        </div>` : ''}
       <div class="slabel">FORMACIONES SUGERIDAS · ART. 13 + HISTORIAL</div>
       ${formations.map((f,idx)=>`
         <div class="fcard ${idx===0?'best':''}">
@@ -2967,6 +3064,110 @@
   let _news = {};            // { id: {titulo, cuerpo, tipo, formacion, autor, ts} }
   let _newsFormAbierto = false;
   let _newsVerTodas = false;
+
+  // ═══════════════════════════════════════════
+  // ARMADO MANUAL — el capitán elige las parejas
+  // ═══════════════════════════════════════════
+  // El capitán decide QUIÉN juega con QUIÉN. La cancha (D1/D2/D3) NO se elige:
+  // la impone el Art. 13 por suma de números, y si se arma mal el partido se
+  // pierde con los parciales (Art. 16.1). Por eso la asigna la app.
+  let _manualAbierto = false;
+  function toggleManual() {
+    _manualAbierto = !_manualAbierto;
+    const b = document.getElementById('manual-body');
+    const t = document.getElementById('manual-toggle');
+    if (!b) return;
+    b.style.display = _manualAbierto ? 'block' : 'none';
+    if (t) t.textContent = _manualAbierto ? 'Cerrar' : 'Abrir';
+    if (_manualAbierto) renderManual();
+  }
+
+  function _confirmadosParaManual() {
+    const conf = Object.entries(ST.attendance).filter(([,v]) => v && v.status === 'confirmed').map(([k]) => k);
+    const propios = ST.lbf.filter(p => p.active && conf.includes(p.name))
+      .map(p => ({ name: p.name, lbfPos: p.lbfPosition || 999 }));
+    const subs = subidosConfirmados().map((n, j) => ({ name: n, lbfPos: 900 + j, subido: true }));
+    return propios.concat(subs);
+  }
+
+  function renderManual() {
+    const b = document.getElementById('manual-body');
+    if (!b) return;
+    const cand = _confirmadosParaManual();
+    const opts = sel => '<option value="">—</option>' + cand.map(p =>
+      `<option value="${esc(p.name)}"${sel === p.name ? ' selected' : ''}>${esc(p.name)}${p.subido ? ' ↑' : ''}</option>`).join('');
+    b.innerHTML = `
+      <div class="txs tmuted" style="margin-bottom:10px;line-height:1.5;">
+        Elegí las tres parejas. La cancha la asigna el <b>Art. 13</b>: D1 es la suma más baja.
+      </div>
+      ${[0,1,2].map(i => `
+        <div class="man-row">
+          <span class="man-lbl">Pareja ${i+1}</span>
+          <select class="man-sel" id="man-${i}-0" onchange="renderManualResultado()">${opts(_man[i][0])}</select>
+          <select class="man-sel" id="man-${i}-1" onchange="renderManualResultado()">${opts(_man[i][1])}</select>
+        </div>`).join('')}
+      <div id="manual-res" style="margin-top:12px;"></div>`;
+    renderManualResultado();
+  }
+
+  let _man = [['',''],['',''],['','']];
+
+  function _leerManual() {
+    for (let i = 0; i < 3; i++) for (let j = 0; j < 2; j++) {
+      const el = document.getElementById(`man-${i}-${j}`);
+      _man[i][j] = el ? el.value : '';
+    }
+    return _man;
+  }
+
+  function renderManualResultado() {
+    const res = document.getElementById('manual-res');
+    if (!res) return;
+    const m = _leerManual();
+    const elegidos = m.flat().filter(Boolean);
+    const dup = elegidos.filter((n,i) => elegidos.indexOf(n) !== i);
+    if (dup.length) {
+      res.innerHTML = `<div class="man-warn">⚠️ <b>${esc(dup[0])}</b> está repetido. Cada jugador va en una sola pareja.</div>`;
+      return;
+    }
+    if (elegidos.length < 6) {
+      res.innerHTML = `<div class="man-info">Faltan ${6 - elegidos.length} jugador${6-elegidos.length===1?'':'es'} para completar las tres parejas.</div>`;
+      return;
+    }
+    // Art. 19: renumerar los 6 elegidos 1..6 por orden de LBF (subidos al final)
+    const cand = _confirmadosParaManual();
+    const orden = elegidos.slice()
+      .map(n => cand.find(p => p.name === n) || { name:n, lbfPos:999 })
+      .sort((a,b) => a.lbfPos - b.lbfPos);
+    const num = {}; orden.forEach((p,i) => num[p.name] = i + 1);
+    const pares = m.map(par => par.map(n => ({ name:n, mn:num[n] })));
+    const c = assignCourts(pares);
+    const empate = (c.d1s === c.d2s) || (c.d2s === c.d3s);
+    res.innerHTML = `
+      <div class="txs tmuted" style="margin-bottom:7px;">Numeración de la fecha (Art. 19): ${orden.map((p,i)=>`${i+1} ${p.name.split(' ')[0]}`).join(' · ')}</div>
+      ${['d1','d2','d3'].map(k => {
+        const pair = c[k], s = c[k+'s'];
+        return `<div class="crow">
+          <div class="clabel ${k}">${k.toUpperCase()}</div>
+          <div class="cplayers flex1"><strong>${esc(pair[0].name)}</strong> · <strong>${esc(pair[1].name)}</strong></div>
+          <div class="csum">Σ${s}</div>
+        </div>`; }).join('')}
+      ${empate ? '<div class="man-info" style="margin-top:8px;">Hubo empate de sumas: por Art. 13 va a D1 la pareja del jugador con menor número de orden.</div>' : ''}
+      <button class="btn btn-p w100 mt8" onclick="confirmarManual()">🔒 Confirmar esta formación</button>`;
+  }
+
+  async function confirmarManual() {
+    const m = _leerManual();
+    const elegidos = m.flat().filter(Boolean);
+    if (elegidos.length < 6 || new Set(elegidos).size !== 6) { toast('⚠️ Completá las tres parejas sin repetir jugadores'); return; }
+    const cand = _confirmadosParaManual();
+    const orden = elegidos.slice()
+      .map(n => cand.find(p => p.name === n) || { name:n, lbfPos:999 })
+      .sort((a,b) => a.lbfPos - b.lbfPos);
+    const num = {}; orden.forEach((p,i) => num[p.name] = i + 1);
+    const c = assignCourts(m.map(par => par.map(n => ({ name:n, mn:num[n] }))));
+    await lockFormation(c);
+  }
 
   function _newsOrdenadas() {
     return Object.entries(_news)
@@ -3217,7 +3418,13 @@
     let mejorPorConjunto = [];   // la mejor formación de CADA conjunto de 6
     let todasDelUnico = [];      // sólo se usa si marcaron exactamente 6
 
-    combos.forEach(six => {
+    combos.forEach(_six => {
+      // Art. 19: los jugadores que juegan ese partido se RENUMERAN del 1 al 6
+      // según el orden en que figuren en la LBF. Sin esto, el número 8 de la
+      // lista seguía siendo 8 dentro del sexteto y su pareja nunca podía ser D1.
+      const six = _six.slice()
+        .sort((x, y) => x.lbfPos - y.lbfPos)
+        .map((p, i) => ({ ...p, mn: i + 1 }));
       // MODO SIN RANKING: no se consulta el historial. Pareo fijo 1º+2º, 3º+4º,
       // 5º+6º según el orden de LBF dentro del sexteto — una única formación por
       // conjunto. Art. 13 igual asigna las canchas por suma (acá ya salen 3-7-11).
@@ -3469,10 +3676,13 @@
     }
   }
 
+  // idx = índice de una formación sugerida, o directamente el objeto de la
+  // formación (así el armado manual reusa exactamente el mismo guardado).
   async function lockFormation(idx) {
     const nm=nextMatch(); if(!nm) return;
     const wrap=document.getElementById('parejas-content');
-    const f=wrap._formations?.[idx]; if(!f) return;
+    const f = (idx && typeof idx === 'object' && idx.d1) ? idx : wrap._formations?.[idx];
+    if(!f) return;
     const data={
       d1:f.d1.map(p=>({name:p.name})),d1s:f.d1s,
       d2:f.d2.map(p=>({name:p.name})),d2s:f.d2s,
@@ -3741,7 +3951,7 @@
     const lockedBanner = document.getElementById('lbf-locked-banner');
 
     const locked  = ST.lbfLocked;
-    const isAdmin = ST.isAdmin;
+    const isAdmin = esCapitan();   // la LBF de cada equipo la maneja su capitán
 
     // Banners
     if (openBanner)   openBanner.style.display   = (isAdmin && !locked) ? 'block' : 'none';
@@ -3809,7 +4019,7 @@
   }
 
   async function lockLBF() {
-    if (!ST.isAdmin) return;
+    if (!esCapitan()) { toast('Solo el capitán de este equipo'); return; }
     if (!ST.lbf.length) { toast('⚠️ Primero agregá jugadores a la lista'); return; }
     if (!confirm(`¿Cerrar la LBF con ${ST.lbf.length} jugadores?\n\nEsto fija el orden para el torneo (Art. 13/19).\nPodés reabrirla desde el panel de admin si necesitás hacer cambios.`)) return;
     try {
@@ -3833,7 +4043,7 @@
   }
 
   async function unlockLBF() {
-    if (!ST.isAdmin) return;
+    if (!esCapitan()) { toast('Solo el capitán de este equipo'); return; }
     if (!confirm('¿Reabrir la LBF para editar el orden?\nPodés volver a cerrarla cuando termines.')) return;
     try {
       if (ST.fbOK && ST.fbDb) await ST.fbDb.ref(tp('lbfLocked')).set(false);
