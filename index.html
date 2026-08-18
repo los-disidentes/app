@@ -3025,7 +3025,26 @@
         <div class="card"><div class="card-title">Confirmados</div>${confirmed.map(p=>`<div class="prow"><div class="pnum">${p.mn}</div><div class="pname flex1">${p.name}</div><span class="chip cg">✓</span></div>`).join('')}</div>`;
       return;
     }
-    const formations=suggestFormations(confirmed,5);
+    // Con 6 jugadores hay exactamente 15 formaciones posibles: pocas, así que se
+    // muestran TODAS. Antes se mostraban 5 y cualquier criterio de recorte dejaba
+    // afuera opciones válidas — el nº1 puede jugar D2 en 3 de las 15 y ninguna de
+    // esas aparecía nunca. Que el capitán vea todo y elija él.
+    const _todas = suggestFormations(confirmed, 999);
+    // Agrupadas por con quién juega el nº1: es lo primero que mira el capitán.
+    const _grupos = new Map();
+    _todas.forEach(f => { const k=_companeroDel1(f); if(!_grupos.has(k)) _grupos.set(k,[]); _grupos.get(k).push(f); });
+    const _ordenados = [..._grupos.entries()].sort((a,b)=>a[0]-b[0]);
+    // El array plano tiene que seguir el MISMO orden en que se dibujan las
+    // tarjetas, porque lockFormation(idx) indexa sobre él.
+    const formations = _ordenados.flatMap(([,fs])=>fs);
+    // La ⭐ va por PUNTAJE, no por posición: _todas viene ordenada por historial y
+    // agrupar rompe ese orden. Si marcara la primera del primer grupo estaría
+    // recomendando una formación cualquiera con cara de recomendación.
+    const _iMejor = formations.indexOf(_todas[0]);
+    const _hayHistorial = new Set(_todas.map(f=>f.perf)).size > 1;
+    const _nombreDe = mn => (confirmed.find(p=>p.mn===mn)||{}).name || ('nº'+mn);
+    const _uno = _nombreDe(1);
+    const _canchaDel1 = f => ['d1','d2','d3'].find(c=>f[c].some(p=>p.mn===1)).toUpperCase();
     wrap.innerHTML=`
       <div class="card">
         <div class="card-title">✅ Confirmados F${nm.rueda} (${confirmed.length})</div>
@@ -3041,28 +3060,42 @@
           </div>
           <div id="manual-body" style="display:none;margin-top:12px;"></div>
         </div>` : ''}
-      <div class="slabel">FORMACIONES SUGERIDAS · ART. 13 + HISTORIAL</div>
-      ${formations.map((f,idx)=>`
-        <div class="fcard ${idx===0?'best':''}">
-          <div class="${idx===0?'txs tgreen fbold':'txs tmuted'}" style="margin-bottom:8px;">${idx===0?'⭐ RECOMENDADA':`Opción ${idx+1}`}</div>
-          ${['d1','d2','d3'].map(c=>{
-            const pair=f[c],sum=f[c+'s'],h=getPairHist(pair[0].name,pair[1].name);
-            return `<div class="crow">
-              <div class="clabel ${c}">${c.toUpperCase()}</div>
-              <div class="cplayers flex1">
-                <strong>${pair[0].name}</strong> · <strong>${pair[1].name}</strong>
-                <small>${h&&h.tot>0?`${h.W}/${h.tot} juntos`:'Sin historial juntos'}</small>
-              </div>
-              <div class="csum">Σ${sum}</div>
-            </div>`;
-          }).join('')}
-          <button class="btn ${idx===0?'btn-p':'btn-o btn-sm'} w100 mt8" onclick="lockFormation(${idx})">
-            ${idx===0?'🔒 Confirmar esta formación':'Usar esta'}
-          </button>
-        </div>`).join('')}
+      <div class="slabel">LAS ${formations.length} FORMACIONES POSIBLES · ART. 13</div>
+      <div class="card" style="padding:11px 14px;">
+        <div class="txs tmuted" style="line-height:1.5;">
+          Estas son <strong>todas</strong> las que permite el reglamento con estos 6, agrupadas por
+          quién juega con <strong>${esc(_uno)}</strong>. La cancha de cada pareja no se elige:
+          la fija el Art. 13 por la suma de los números.
+        </div>
+      </div>
+      ${(() => { let i = -1; return _ordenados.map(([compi, fs]) => `
+        <div class="slabel" style="margin-top:16px;">🎾 ${esc(_uno)} CON ${esc(_nombreDe(compi))} · ${fs.length} ${fs.length===1?'OPCIÓN':'OPCIONES'}</div>
+        ${fs.map(f => { i++; const idx = i, mejor = idx === _iMejor; return `
+          <div class="fcard ${mejor?'best':''}">
+            <div class="flex" style="justify-content:space-between;align-items:center;margin-bottom:8px;gap:8px;">
+              <div class="${mejor?'txs tgreen fbold':'txs tmuted'}">${mejor?(_hayHistorial?'⭐ MEJOR SEGÚN HISTORIAL':'⭐ RECOMENDADA'):`Opción ${idx+1}`}</div>
+              <div class="txs tmuted">${esc(_uno.split(' ')[0])} juega ${_canchaDel1(f)}</div>
+            </div>
+            ${['d1','d2','d3'].map(c=>{
+              const pair=f[c],sum=f[c+'s'],h=getPairHist(pair[0].name,pair[1].name);
+              return `<div class="crow">
+                <div class="clabel ${c}">${c.toUpperCase()}</div>
+                <div class="cplayers flex1">
+                  <strong>${pair[0].name}</strong> · <strong>${pair[1].name}</strong>
+                  <small>${h&&h.tot>0?`${h.W}/${h.tot} juntos`:'Sin historial juntos'}</small>
+                </div>
+                <div class="csum">Σ${sum}</div>
+              </div>`;
+            }).join('')}
+            <button class="btn ${mejor?'btn-p':'btn-o btn-sm'} w100 mt8" onclick="lockFormation(${idx})">
+              ${mejor?'🔒 Confirmar esta formación':'Usar esta'}
+            </button>
+          </div>`; }).join('')}
+      `).join(''); })()}
       <div class="card mt14">
         <div class="card-title txs tmuted" style="font-family:var(--sans);font-size:.65rem;text-transform:uppercase;letter-spacing:1px;">📋 Reglamento</div>
         <p class="txs tmuted" style="line-height:1.5;">Art. 19: Se renumeran los presentes 1–N por orden de LBF. Art. 13: D1 = suma más baja, D3 = suma más alta. Empate: D1 tiene el número más bajo.</p>
+        <p class="txs tmuted" style="line-height:1.5;margin-top:8px;">Por eso el nº1 casi siempre cae en D1: su pareja suma como mucho 1+6=7. Puede jugar D2 si va con el 5 o el 6 y los que siguen se emparejan bajo. En D3 no puede estar nunca — para eso las otras dos parejas deberían sumar 7 o menos cada una, y ahí el desempate lo manda igual a D1.</p>
       </div>
     `;
     wrap._formations = formations;
