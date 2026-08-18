@@ -3094,20 +3094,41 @@
     const b = document.getElementById('manual-body');
     if (!b) return;
     const cand = _confirmadosParaManual();
-    const opts = sel => '<option value="">—</option>' + cand.map(p =>
-      `<option value="${esc(p.name)}"${sel === p.name ? ' selected' : ''}>${esc(p.name)}${p.subido ? ' ↑' : ''}</option>`).join('');
+    const usados = _man.flat().filter(Boolean);
+    // Un jugador ya elegido NO aparece en los demás desplegables: así es
+    // imposible ponerlo en dos canchas, en vez de avisarlo después.
+    const opts = sel => '<option value="">—</option>' + cand
+      .filter(p => p.name === sel || usados.indexOf(p.name) === -1)
+      .map(p => {
+        const bloq = _bloqueoArt9(p.name);
+        return `<option value="${esc(p.name)}"${sel === p.name ? ' selected' : ''}${bloq ? ' disabled' : ''}>${esc(p.name)}${p.subido ? ' ↑' : ''}${bloq ? ' — no puede jugar' : ''}</option>`;
+      }).join('');
     b.innerHTML = `
       <div class="txs tmuted" style="margin-bottom:10px;line-height:1.5;">
         Elegí las tres parejas. La cancha la asigna el <b>Art. 13</b>: D1 es la suma más baja.
+        Un jugador ya elegido desaparece de las otras listas.
       </div>
       ${[0,1,2].map(i => `
         <div class="man-row">
           <span class="man-lbl">Pareja ${i+1}</span>
-          <select class="man-sel" id="man-${i}-0" onchange="renderManualResultado()">${opts(_man[i][0])}</select>
-          <select class="man-sel" id="man-${i}-1" onchange="renderManualResultado()">${opts(_man[i][1])}</select>
+          <select class="man-sel" id="man-${i}-0" onchange="_manualCambio()">${opts(_man[i][0])}</select>
+          <select class="man-sel" id="man-${i}-1" onchange="_manualCambio()">${opts(_man[i][1])}</select>
         </div>`).join('')}
       <div id="manual-res" style="margin-top:12px;"></div>`;
     renderManualResultado();
+  }
+
+  // Al elegir, se vuelven a armar los desplegables para sacar al ya usado
+  function _manualCambio() { _leerManual(); renderManual(); }
+
+  // Art. 9.2: si quedó clasificado en 5ta A no puede jugar en 5ta B — el partido
+  // se pierde 0-3. Devuelve el motivo del bloqueo, o null si puede jugar.
+  function _bloqueoArt9(nombre) {
+    if (ST.team !== '5B') return null;
+    const e = estadoArt9(nombre);
+    return e.tipo === 'clasificado'
+      ? `${nombre} quedó clasificado en 5ta A (Art. 9.2): si juega en 5ta B se pierde el partido 0-3.`
+      : null;
   }
 
   let _man = [['',''],['',''],['','']];
@@ -3125,15 +3146,29 @@
     if (!res) return;
     const m = _leerManual();
     const elegidos = m.flat().filter(Boolean);
+    // Red de seguridad: los desplegables ya impiden repetir, pero si algo se
+    // colara (datos viejos, dos pestañas abiertas) no se puede confirmar.
     const dup = elegidos.filter((n,i) => elegidos.indexOf(n) !== i);
     if (dup.length) {
-      res.innerHTML = `<div class="man-warn">⚠️ <b>${esc(dup[0])}</b> está repetido. Cada jugador va en una sola pareja.</div>`;
+      res.innerHTML = `<div class="man-warn">🚫 <b>${esc(dup[0])}</b> no puede jugar en dos canchas. Sacalo de una de las parejas.</div>`;
       return;
     }
+    // Art. 9.2 — inhabilitado por haber quedado clasificado arriba
+    const bloq = elegidos.map(n => _bloqueoArt9(n)).find(Boolean);
+    if (bloq) { res.innerHTML = `<div class="man-warn">🚫 ${esc(bloq)}</div>`; return; }
+    // Jugador que no confirmó asistencia
+    const cands = _confirmadosParaManual().map(p => p.name);
+    const fuera = elegidos.find(n => cands.indexOf(n) === -1);
+    if (fuera) { res.innerHTML = `<div class="man-warn">🚫 <b>${esc(fuera)}</b> no confirmó la asistencia a esta fecha.</div>`; return; }
     if (elegidos.length < 6) {
       res.innerHTML = `<div class="man-info">Faltan ${6 - elegidos.length} jugador${6-elegidos.length===1?'':'es'} para completar las tres parejas.</div>`;
       return;
     }
+    // Aviso (no bloqueo): un subido que gasta su tercera vez queda clasificado
+    const tercera = elegidos.filter(n => {
+      const p = _confirmadosParaManual().find(x => x.name === n);
+      return p && p.subido && estadoArt9(n).usadas >= 2;
+    });
     // Art. 19: renumerar los 6 elegidos 1..6 por orden de LBF (subidos al final)
     const cand = _confirmadosParaManual();
     const orden = elegidos.slice()
@@ -3153,13 +3188,20 @@
           <div class="csum">Σ${s}</div>
         </div>`; }).join('')}
       ${empate ? '<div class="man-info" style="margin-top:8px;">Hubo empate de sumas: por Art. 13 va a D1 la pareja del jugador con menor número de orden.</div>' : ''}
+      ${tercera.length ? `<div class="man-warn" style="margin-top:8px;">⚠️ <b>${esc(tercera.join(', '))}</b> ya usó sus 2 partidos en 5ta A. Si juega éste queda <b>clasificado</b> y no puede volver a 5ta B este torneo (Art. 9.2).</div>` : ''}
       <button class="btn btn-p w100 mt8" onclick="confirmarManual()">🔒 Confirmar esta formación</button>`;
   }
 
   async function confirmarManual() {
     const m = _leerManual();
     const elegidos = m.flat().filter(Boolean);
-    if (elegidos.length < 6 || new Set(elegidos).size !== 6) { toast('⚠️ Completá las tres parejas sin repetir jugadores'); return; }
+    // Última barrera antes de guardar: nada inválido llega a Firebase
+    if (elegidos.length < 6) { toast('⚠️ Faltan jugadores para completar las tres parejas'); return; }
+    if (new Set(elegidos).size !== 6) { toast('🚫 Un jugador no puede estar en dos canchas'); return; }
+    const bloq = elegidos.map(n => _bloqueoArt9(n)).find(Boolean);
+    if (bloq) { toast('🚫 ' + bloq, 6000); return; }
+    const cands = _confirmadosParaManual().map(p => p.name);
+    if (elegidos.some(n => cands.indexOf(n) === -1)) { toast('🚫 Hay un jugador que no confirmó la asistencia'); return; }
     const cand = _confirmadosParaManual();
     const orden = elegidos.slice()
       .map(n => cand.find(p => p.name === n) || { name:n, lbfPos:999 })
@@ -3410,7 +3452,9 @@
     let combos = _combinations(pool, 6);
     // Cota de memoria: C(N,6) explota rápido (19 jugadores = 27.132, 25 = 177.100).
     // Si son demasiados, evaluamos una muestra repartida en vez de todos.
-    const MAX_CONJUNTOS = 20000;
+    // Ahora se expanden las 15 particiones de cada conjunto, así que la cota
+    // baja: 2.000 conjuntos × 15 = 30.000 formaciones, manejable en un celular.
+    const MAX_CONJUNTOS = 2000;
     if (combos.length > MAX_CONJUNTOS) {
       const paso = combos.length / MAX_CONJUNTOS;
       combos = Array.from({ length: MAX_CONJUNTOS }, (_, i) => combos[Math.floor(i * paso)]);
@@ -3453,7 +3497,12 @@
       }
       delConjunto.sort((x, y) => y.perf - x.perf);
       if (combos.length === 1) todasDelUnico = delConjunto;
-      mejorPorConjunto.push(delConjunto[0]);
+      // Antes acá se guardaba SOLO delConjunto[0]. Sin historial todos los perf
+      // valen 0, el sort no reordena nada y la "mejor" era siempre la primera
+      // partición generada (1+2 / 3+4 / 5+6). Resultado: el simulador mostraba
+      // 8 opciones con el mismo patrón y escondía 14 de las 15 particiones.
+      // Ahora se guardan todas y más abajo se elige con criterio.
+      delConjunto.forEach(f => mejorPorConjunto.push(f));
     });
 
     // Sin ranking no hay puntaje que ordenar: se ordena por fuerza de LBF
@@ -3476,10 +3525,49 @@
     const mejorPerf = mejorPorConjunto[0].perf;
     const empatadas = mejorPorConjunto.filter(f => f.perf === mejorPerf);
     if (empatadas.length > topN) {
-      const paso = empatadas.length / topN;
-      return Array.from({ length: topN }, (_, i) => empatadas[Math.floor(i * paso)]);
+      // Repartir por PATRÓN de numeración (1-2/3-4/5-6, 1-6/2-5/3-4, …).
+      // Con una muestra "cada N" salían todas con el mismo patrón, porque las
+      // particiones se generan agrupadas. Round-robin entre patrones garantiza
+      // que se vean pareos distintos, incluido el primero con el último.
+      const porPatron = new Map();
+      empatadas.forEach(f => {
+        const k = _companeroDel1(f);
+        if (!porPatron.has(k)) porPatron.set(k, []);
+        porPatron.get(k).push(f);
+      });
+      // Ordenar los baldes por compañero del 1 (2, 3, 4, 5, 6…) para que la
+      // primera vuelta muestre justamente todas las parejas posibles del 1.
+      const baldes = [...porPatron.entries()].sort((a,b) => a[0]-b[0]).map(e => e[1]);
+      // Dentro de cada balde, variar también el resto del pareo
+      baldes.forEach(b => b.sort((x,y) => _patronFormacion(x) < _patronFormacion(y) ? -1 : 1));
+      const out = [];
+      for (let ronda = 0; out.length < topN; ronda++) {
+        let sumo = false;
+        for (const b of baldes) {
+          if (b[ronda]) { out.push(b[ronda]); sumo = true; if (out.length === topN) break; }
+        }
+        if (!sumo) break;   // no queda nada por repartir
+      }
+      return out;
     }
     return mejorPorConjunto.slice(0, topN);
+  }
+
+  // Firma del pareo por números de orden: "1-2|3-4|5-6"
+  function _patronFormacion(f) {
+    return ['d1','d2','d3']
+      .map(k => f[k].map(p => p.mn).sort((a,b) => a-b).join('-'))
+      .join('|');
+  }
+
+  // Con quién juega el jugador de menor número. Es el criterio que más cambia
+  // una formación, y el que el capitán quiere comparar: repartir por acá
+  // garantiza ver al 1 con el 2, con el 3… y también con el último.
+  function _companeroDel1(f) {
+    const par = ['d1','d2','d3'].map(k => f[k]).find(p => p.some(q => q.mn === 1));
+    if (!par) return 99;
+    const otro = par.find(q => q.mn !== 1);
+    return otro ? otro.mn : 99;
   }
 
   function _appendSimulador() {
@@ -5140,6 +5228,24 @@
   // DEBUG — 5 taps en status bar → diagnóstico
   // ═══════════════════════════════════════════
   let _tapCount = 0, _tapTimer = null;
+  // Versión real, sin hardcodear: la que estás corriendo sale del cache activo
+  // del service worker; la del servidor, del sw.js publicado.
+  async function _versiones() {
+    let usando = 'desconocida', servidor = 'desconocida';
+    try {
+      const ks = await caches.keys();
+      const ns = ks.map(k => (k.match(/disidentes-v(\d+)/) || [])[1]).filter(Boolean).map(Number);
+      if (ns.length) usando = 'v' + Math.max(...ns);
+    } catch(_) {}
+    try {
+      const t = await fetch('/app/sw.js?x=' + Date.now(), { cache:'no-store' }).then(r => r.text());
+      const m = t.match(/disidentes-v(\d+)/);
+      if (m) servidor = 'v' + m[1];
+    } catch(_) {}
+    if (usando === 'desconocida' && servidor !== 'desconocida') usando = servidor + ' (sin caché)';
+    return { usando, servidor };
+  }
+
   async function _statusTap() {
     _tapCount++;
     clearTimeout(_tapTimer);
@@ -5154,8 +5260,13 @@
     document.body.appendChild(panel);
     const out = document.getElementById('dbg-out');
 
+    // La versión se LEE, no se escribe a mano: antes había un 'v51' hardcodeado
+    // que quedó congelado 20 versiones y el panel informaba cualquier cosa.
+    const _ver = await _versiones();
     const info = {
-      appVersion: 'v51',
+      versionQueEstasUsando: _ver.usando,
+      versionEnElServidor: _ver.servidor,
+      actualizada: _ver.usando === _ver.servidor ? 'sí' : 'NO — cerrá y abrí la app',
       fbOK: ST?.fbOK,
       player: ST?.player,
       sdot: document.getElementById('sdot')?.className,
