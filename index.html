@@ -1589,7 +1589,7 @@
           const v = await rl.json();
           if (v !== null) { if (id === LEGACY_TEAM) ST._lbfLockedOwn5B = true; setTeamData('lbfLocked', id, !!v); }
         }
-      } catch(_) {}
+      } catch(e) { _falla(e, 'REST lbf/lbfLocked por equipo'); }
     }
     if (!ST._lbfOwn5B) {
       try {
@@ -1602,14 +1602,14 @@
             _afterLBFChange(LEGACY_TEAM);
           }
         }
-      } catch(_) {}
+      } catch(e) { _falla(e, 'REST lbf legacy'); }
     }
 
     // Capitanes por equipo
     try {
       const rc = await fetch(`${BASE}/config/captains.json`);
       if (rc.ok) ST.captains = (await rc.json()) || {};
-    } catch(_) {}
+    } catch(e) { _falla(e, 'REST capitanes'); }
 
     // Config / lbfLocked (ruta vieja → sólo si 5ta B no tiene flag propio)
     try {
@@ -1623,7 +1623,7 @@
           if (ST.activeTab === 'lbf') renderLBF();
         }
       }
-    } catch(_) {}
+    } catch(e) { _falla(e, 'poll lbfLocked'); }
 
     // Chat — últimos 120 mensajes
     // orderBy="$key" funciona sin índice en las reglas; push-keys son cronológicamente ordenadas
@@ -1639,7 +1639,7 @@
           if (ST.activeTab === 'chat') renderChat();
         }
       }
-    } catch(_) {}
+    } catch(e) { _falla(e, 'poll chat'); }
 
     // Galería
     try {
@@ -1651,7 +1651,7 @@
           if (ST.activeTab === 'galeria') renderGallery();
         }
       }
-    } catch(_) {}
+    } catch(e) { _falla(e, 'poll galería'); }
 
     // Asistencia — próximo partido
     const nm = nextMatch ? nextMatch() : null;
@@ -1672,14 +1672,14 @@
           if (ST.activeTab === 'parejas')    renderParejas();
           updateAttBadge();
         }
-      } catch(_) {}
+      } catch(e) { _falla(e, 'poll asistencia'); }
     }
 
     // Novedades por REST (sin WebSocket no llega el listener)
     try {
       const r = await fetch(`${BASE}/news.json?orderBy=%22%24key%22&limitToLast=30`);
       if (r.ok) { _news = (await r.json()) || {}; renderNews(); }
-    } catch(_) {}
+    } catch(e) { _falla(e, 'poll novedades'); }
 
     // Datos cargados via REST — punto ámbar + arrancar polling si no hay WebSocket
     if (!ST.fbOK) {
@@ -2358,6 +2358,9 @@
   // AbortSignal.timeout() no existe en Safari < 16. Sin este fallback, apiGet tira
   // TypeError en los 3 intentos y la pantalla se queda "Cargando…" para siempre.
   function _timeoutSignal(ms) {
+    // Los dos catch de acá son los ÚNICOS mudos a propósito de toda la app:
+    // esto es detección de capacidades del navegador, no manejo de errores.
+    // Que falle es la respuesta esperada en un navegador viejo, no una falla.
     try { if (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) return AbortSignal.timeout(ms); } catch(_) {}
     try { const c = new AbortController(); setTimeout(() => c.abort(), ms); return c.signal; } catch(_) {}
     return undefined; // sin timeout, pero al menos no rompe
@@ -2378,14 +2381,14 @@
           // null o [] → datos iniciales vacíos → seguir al proxy
           if (data && !(Array.isArray(data) && data.length === 0)) return data;
         }
-      } catch(_) {}
+      } catch(e) { _falla(e, 'liga: caché local'); }
     }
 
     // 2. CORS proxy como fallback
     try {
       const r = await fetch(CFG.corsProxy + encodeURIComponent(url), { signal: _timeoutSignal(6000) });
       return JSON.parse(await r.text());
-    } catch(_) {}
+    } catch(e) { _falla(e, 'liga: proxy CORS'); }
 
     // 3. Directo (funciona si el navegador tiene CORS permisivo)
     try {
@@ -4238,7 +4241,7 @@
         if (dl && data) {
           dl.innerHTML = Object.values(data).map(p=>`<option value="${esc(p.name)}">`).join('');
         }
-      } catch(e2) {}
+      } catch(e2) { _falla(e2, 'datalist de jugadores'); }
       return;
     }
     const players = Object.values(snap.val()||{});
@@ -4298,7 +4301,7 @@
         ]);
         allAtt  = Object.assign({}, ra || {}, ta || {});
         allForm = Object.assign({}, rf || {}, tf || {});
-      } catch(e2) {}
+      } catch(e2) { _falla(e2, 'REST asistencia+formación'); }
     }
 
     // Jugadores: todos los que están en la LBF o aparecieron alguna vez en attendance
@@ -4427,7 +4430,7 @@
       try {
         const r = await fetch(`${CFG.fbDefaultUrl}/payments/${curMonth}.json`);
         pays = (r.ok ? await r.json() : null) || {};
-      } catch(e2) {}
+      } catch(e2) { _falla(e2, 'REST pagos del mes'); }
     }
 
     // El fee es del CLUB, no de la categoría: van los dos equipos juntos.
@@ -4821,7 +4824,7 @@
         if (Array.isArray(c) && c.length) setTeamData('fixture', id, c);
         const s = JSON.parse(localStorage.getItem('standings_' + id) || '[]');
         if (Array.isArray(s) && s.length) setTeamData('standings', id, s);
-      } catch(_) {}
+      } catch(e) { _falla(e, 'caché local fixture/tabla'); }
     });
     const mio = miEquipoPorLBF();
     if (mio && !localStorage.getItem('team')) { ST.team = mio; syncTeamViews(); }
@@ -4874,13 +4877,60 @@
     });
   }
 
+  // ═══════════════════════════════════════════
+  // REGISTRO DE FALLAS — que nada falle en silencio
+  // ═══════════════════════════════════════════
+  //
+  // Por qué existe: la app tiene muchos `catch` alrededor de fetch, porque un
+  // celular sin señal ES un caso esperado y no debe romper nada. El problema es
+  // que ese mismo catch también se tragaba los BUGS. Un llamado a una función
+  // mal escrita murió ahí adentro durante varias versiones sin dejar rastro.
+  //
+  // La distinción es la clave: un fallo de RED es esperable (se anota y sigue),
+  // un fallo de CÓDIGO es un bug (grita en consola y queda contado en el panel
+  // de debug, 5 taps en la barra de estado).
+  const _FALLAS_MAX = 40;
+  const _fallas = [];
+
+  function _esFalloDeRed(e) {
+    if (!e) return true;
+    const n = e.name || '';
+    const m = String(e.message || e);
+    if (n === 'AbortError' || n === 'TimeoutError') return true;
+    // "Failed to fetch" (Chrome) · "Load failed" (Safari) · "NetworkError…" (Firefox)
+    if (/failed to fetch|load failed|networkerror|network request failed|the internet connection appears to be offline/i.test(m)) return true;
+    // JSON.parse sobre una página de error del proxy: sigue siendo un fallo de red
+    if (n === 'SyntaxError' && /unexpected|json/i.test(m)) return true;
+    return false;
+  }
+
+  // Se llama desde los catch. Nunca puede tirar error ella misma.
+  function _falla(e, donde) {
+    try {
+      const red = _esFalloDeRed(e);
+      _fallas.push({ donde, red, msg: String(e && e.message || e), ts: Date.now() });
+      if (_fallas.length > _FALLAS_MAX) _fallas.shift();
+      if (red) console.warn(`[Disidentes] red · ${donde}:`, e && e.message || e);
+      else     console.error(`[Disidentes] BUG · ${donde}:`, e);
+    } catch(_) { /* el registro de fallas jamás debe romper la app */ }
+  }
+
+  function _resumenFallas() {
+    const bugs = _fallas.filter(f => !f.red);
+    return {
+      total: _fallas.length,
+      bugs: bugs.length,
+      ultimosBugs: bugs.slice(-5).map(f => `${f.donde}: ${f.msg}`),
+      ultimasDeRed: _fallas.filter(f => f.red).slice(-3).map(f => f.donde),
+    };
+  }
+
   // Error handler global — captura promesas no manejadas para debugging
   window.addEventListener('unhandledrejection', e => {
-    console.error('[Disidentes] Unhandled rejection:', e.reason);
-    // No molesta al usuario con toasts por errores de red/Firebase silenciosos
+    _falla(e.reason, 'promesa sin manejar');
   });
   window.addEventListener('error', e => {
-    console.error('[Disidentes] Error global:', e.message, e.filename, e.lineno);
+    _falla(e.error || new Error(e.message), `global ${e.filename||''}:${e.lineno||''}`);
   });
 
   document.addEventListener('DOMContentLoaded', init);
@@ -4901,7 +4951,7 @@
           _galleryItems = data;
           if (ST.activeTab === 'galeria') renderGallery();
         }
-      }).catch(() => {});
+      }).catch(e => _falla(e, 'carga inicial galería'));
     // Listener WebSocket para actualizaciones en tiempo real
     ST.fbDb.ref('gallery').on('value', snap => {
       _galleryItems = snap.val() || {};
@@ -5197,12 +5247,12 @@
       const ks = await caches.keys();
       const ns = ks.map(k => (k.match(/disidentes-v(\d+)/) || [])[1]).filter(Boolean).map(Number);
       if (ns.length) usando = 'v' + Math.max(...ns);
-    } catch(_) {}
+    } catch(e) { _falla(e, 'leer versión de caché'); }
     try {
       const t = await fetch('/app/sw.js?x=' + Date.now(), { cache:'no-store' }).then(r => r.text());
       const m = t.match(/disidentes-v(\d+)/);
       if (m) servidor = 'v' + m[1];
-    } catch(_) {}
+    } catch(e) { _falla(e, 'leer versión del servidor'); }
     if (usando === 'desconocida' && servidor !== 'desconocida') usando = servidor + ' (sin caché)';
     return { usando, servidor };
   }
@@ -5235,6 +5285,7 @@
       ua: navigator.userAgent,
       standalone: window.matchMedia('(display-mode: standalone)').matches || !!navigator.standalone,
       online: navigator.onLine,
+      fallas: _resumenFallas(),
     };
 
     // SW check
@@ -5242,7 +5293,7 @@
       const reg = await navigator.serviceWorker?.getRegistration('/app/');
       info.sw = reg?.active?.scriptURL?.split('/').pop() || 'none';
       info.swState = reg?.active?.state;
-    } catch(e) { info.sw = 'error'; }
+    } catch(e) { info.sw = 'error'; _falla(e, 'leer service worker'); }
 
     // WebSocket test directo
     info.wsTest = 'testando…';

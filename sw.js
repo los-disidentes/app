@@ -1,5 +1,5 @@
-// Service Worker — Los Disidentes App v75
-const CACHE = 'disidentes-v75';
+// Service Worker — Los Disidentes App v76
+const CACHE = 'disidentes-v76';
 const PRECACHE = [
   '/app/',
   '/app/index.html',
@@ -29,7 +29,7 @@ self.addEventListener('activate', e => {
       .then(clients => {
         // Decirle a cada pestaña abierta que hay una nueva versión
         // El controllerchange en el cliente ya recarga automáticamente
-        clients.forEach(c => c.postMessage({ type: 'SW_UPDATED', version: '75' }));
+        clients.forEach(c => c.postMessage({ type: 'SW_UPDATED', version: '76' }));
       })
   );
 });
