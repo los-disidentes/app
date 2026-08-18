@@ -916,8 +916,9 @@
       </div>
     </div>
 
-    <!-- Combinaciones de canchas basadas en activos de la LBF -->
-    <div id="lbf-combos-wrap"></div>
+    <!-- Las formaciones NO van acá: viven en la pestaña Parejas (sugeridas,
+         simulador y armado a mano). Tener una segunda copia en LBF hacía que
+         las dos pantallas mostraran cosas distintas. -->
 
     <!-- Historial de asistencia y partidos jugados -->
     <div class="card" id="history-card">
@@ -1165,7 +1166,15 @@
     try { renderParejas();  } catch(e) { console.error('renderParejas:', e); }
     try { renderLBF();      } catch(e) { console.error('renderLBF:', e); }
     try { updateAttBadge(); } catch(e) { console.error('updateAttBadge:', e); }
-    if (ST.activeTab === 'rendimientos') { try { renderPerf(); } catch(e) {} }
+    // Los stats se calculan sobre el fixture DEL EQUIPO, así que al cambiar de
+    // equipo hay que invalidarlos siempre — si no, al entrar a Stats más tarde
+    // se ven los números del otro equipo. (Antes acá se llamaba a una función
+    // con el nombre mal escrito, dentro de un catch vacío: fallaba en silencio.)
+    ST.perfLoaded = false;
+    ST.perfs = [];
+    if (ST.activeTab === 'rendimientos') {
+      try { renderRend(); } catch(e) { console.error('renderRend:', e); }
+    }
     const cal = document.getElementById('cal-line');
     if (cal) { cal.classList.remove('wipe'); void cal.offsetWidth; cal.classList.add('wipe'); }
     watchTeamMatch();
@@ -4070,7 +4079,6 @@
     const _a9 = ST.team === '5B' ? badgeArt9 : (() => '');
     if (ST.team === '5B') cargarFormacionesA();
 
-    renderLBFCombos();
     if (isAdmin) loadRegisteredPlayersDatalist();
     if (isAdmin && !locked) {
       // Admin con lista abierta: editable (drag & drop + eliminar)
@@ -4173,7 +4181,6 @@
     if(!ST.isAdmin){toast('Solo el admin puede modificar');return;}
     ST.lbf[i].active=!ST.lbf[i].active;
     saveLBF();
-    renderLBFCombos(); // actualizar combinaciones al cambiar activos
   }
   function removeLBF(i){
     if(!ST.isAdmin){toast('Solo el admin puede eliminar jugadores');return;}
@@ -4238,61 +4245,6 @@
     const dl = document.getElementById('registered-players-list');
     if(dl) dl.innerHTML = players.map(p=>`<option value="${esc(p.name)}">`).join('');
   }
-  function renderLBFCombos() {
-    const wrap = document.getElementById('lbf-combos-wrap');
-    if (!wrap) return;
-    const nm = nextMatch();
-    if (!nm) { wrap.innerHTML = ''; return; }
-
-    // Solo jugadores activos EN LBF que además confirmaron asistencia para esta fecha
-    const confNames = Object.values(ST.attendance)
-      .filter(v => v.status === 'confirmed')
-      .map(v => normalizeName(v.player || ''));
-    const confirmed = ST.lbf
-      .filter(p => p.active && confNames.includes(normalizeName(p.name)))
-      .map((p,i) => ({name:p.name, mn:i+1}));
-
-    if (confirmed.length < 6) {
-      wrap.innerHTML = `
-        <div class="slabel">COMBINACIONES POSIBLES · F${nm.rueda}</div>
-        <div class="card"><div class="empty" style="padding:16px 0;">
-          <div class="ei">⏳</div>
-          <p>Esperando confirmaciones de asistencia.<br>
-          <strong class="tgreen">${confirmed.length}/6</strong> confirmados hasta ahora.</p>
-          <div class="txs tmuted">Las combinaciones aparecen cuando haya 6 jugadores confirmados.</div>
-        </div></div>`;
-      return;
-    }
-
-    const combos = getAllPairings(confirmed).map(pairing => {
-      const courts = assignCourts(pairing);
-      const perf = ['d1','d2','d3'].reduce((acc,c) => {
-        const p = courts[c];
-        return acc + pairPerf(p[0].name,p[1].name) + (playerPct(p[0].name)+playerPct(p[1].name))/200;
-      }, 0);
-      return {...courts, perf};
-    }).sort((a,b) => b.perf - a.perf);
-
-    wrap.innerHTML = `
-      <div class="slabel">COMBINACIONES · F${nm.rueda} vs ${rival(nm)} · ${confirmed.length} CONFIRMADOS · ${combos.length} OPCIONES</div>
-      ${combos.slice(0,5).map((f,idx) => `
-        <div class="fcard ${idx===0?'best':''}">
-          <div class="${idx===0?'txs tgreen fbold':'txs tmuted'}" style="margin-bottom:8px;">${idx===0?'⭐ MEJOR SEGÚN HISTORIAL':`Opción ${idx+1}`}</div>
-          ${['d1','d2','d3'].map(c => {
-            const pair=f[c], sum=f[c+'s'], h=getPairHist(pair[0].name,pair[1].name);
-            return `<div class="crow">
-              <div class="clabel ${c}">${c.toUpperCase()}</div>
-              <div class="cplayers flex1">
-                <strong>${pair[0].name}</strong> · <strong>${pair[1].name}</strong>
-                <small>Σ${sum}${h&&h.tot>0?` · ${h.W}/${h.tot} juntos`:''}</small>
-              </div>
-            </div>`;
-          }).join('')}
-        </div>`).join('')}
-      <div class="txs tmuted tcenter" style="padding:4px 0 8px;">Art. 19: numerados 1–${confirmed.length} por orden LBF · Art. 13: D1 = Σ menor, D3 = Σ mayor</div>
-    `;
-  }
-
   // ═══════════════════════════════════════════
   // HISTORIAL DE ASISTENCIA + PARTIDOS
   // ═══════════════════════════════════════════
