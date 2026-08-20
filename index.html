@@ -1041,7 +1041,11 @@
     teamKeywords:   ['disidentes', 'miralagos los'],
     corsProxy:      'https://api.allorigins.win/raw?url=',
     ligaBase:       'https://www.ligacountrysur.com.ar',
-    lockDays:       4,
+    // Días antes del partido en que se cierra la asistencia. Los dos equipos
+    // juegan domingo, así que con 1 la confirmación queda abierta todo el
+    // viernes y recién cierra el sábado a las 00:00. Antes era 4 y cerraba el
+    // miércoles, demasiado temprano para gente que define sobre la semana.
+    lockDays:       1,
     fbKey:          'fbDbUrl',
     // URL de la base de datos — hardcodeada para que funcione en todos los dispositivos sin configuración
     fbDefaultUrl:   'https://los-disidentes-app-default-rtdb.firebaseio.com',
@@ -2594,7 +2598,24 @@
     const m = String(s||'').match(/^(\d{4})-(\d{2})-(\d{2})/);
     return m ? new Date(+m[1], +m[2]-1, +m[3]) : new Date(s);
   }
-  function isLocked(m) { return m?(pDate(m.fecha)-new Date())/86400000<=CFG.lockDays:false; }
+  // Instante exacto en que se cierra la asistencia de un partido.
+  // Se resta con setDate() y no restando milisegundos: si alguna vez vuelve el
+  // horario de verano, restar 86400000 ms no da el mismo horario del día anterior.
+  function cierreAsistencia(m) {
+    if (!m) return null;
+    const d = pDate(m.fecha);
+    d.setDate(d.getDate() - CFG.lockDays);
+    return d;
+  }
+  // Último día en que TODAVÍA se puede confirmar (el cierre es a las 00:00 del
+  // día siguiente, así que el último día abierto es el anterior al cierre).
+  function ultimoDiaAbierto(m) {
+    const c = cierreAsistencia(m);
+    if (!c) return '';
+    const d = new Date(c); d.setDate(d.getDate() - 1);
+    return ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'][d.getDay()];
+  }
+  function isLocked(m) { return m ? new Date() >= cierreAsistencia(m) : false; }
   function daysUntil(s) { const d=pDate(s);d.setHours(0,0,0,0);const t=new Date();t.setHours(0,0,0,0);return Math.round((d-t)/86400000); }
   function fmtDate(s) {
     const d=pDate(s);
@@ -2891,7 +2912,7 @@
             <div class="fbold fserif" style="font-size:1.05rem;">F${nm.rueda} vs ${rival(nm)}</div>
             <div class="txs tmuted">${fmtDate(nm.fecha)} · ${nm.home?'Local':'Visita'}</div>
           </div>
-          <span class="chip ${locked?'cr':'cx'}">${locked?'🔒 Cerrado':`Cierra en ${Math.max(0,days-CFG.lockDays)}d`}</span>
+          <span class="chip ${locked?'cr':'cx'}">${locked?'🔒 Cerrado':`Abierto hasta el ${ultimoDiaAbierto(nm)}`}</span>
         </div>
       </div>
       <div class="att-stats">
