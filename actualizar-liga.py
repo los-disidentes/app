@@ -37,7 +37,12 @@ EQUIPOS = {
     '5A': {'campeonato': 4302, 'nombre': 'Miralagos Los Disidentes A', 'zona': 'Quinta A Zona 2'},
     '5B': {'campeonato': 4304, 'nombre': 'Miralagos Los Disidentes B', 'zona': 'Quinta B Zona 2'},
 }
-BASE = 'https://ligacountrysur.com.ar/tenis'
+# OJO: la página /tenis?torneo=..&campeonato=.. IGNORA esos parámetros del lado del
+# servidor. Un fetch plano devuelve siempre una categoría por defecto (aparecían
+# Ducilo, Abril, Grand Bell y ningún Disidentes). El navegador ve lo correcto
+# porque después pide este endpoint, que sí lleva campeonato y torneo en la ruta
+# y devuelve el fragmento HTML con la tabla y las 11 fechas de esa zona.
+BASE = 'https://ligacountrysur.com.ar/liga/tabla-resultados-alt'
 # Sin User-Agent de navegador el sitio (detrás de Cloudflare) puede no responder.
 CABECERAS = {
     'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 '
@@ -81,9 +86,11 @@ def parsear_fecha(texto, anio):
 
 
 def bajar(campeonato):
-    url = f'{BASE}?torneo={TORNEO}&campeonato={campeonato}'
+    url = f'{BASE}/{campeonato}/{TORNEO}'
     r = requests.get(url, headers=CABECERAS, timeout=45)
     r.raise_for_status()
+    if 'alt-table' not in r.text:
+        raise RuntimeError(f'la respuesta no tiene la tabla esperada ({len(r.text)} bytes)')
     return BeautifulSoup(r.text, 'html.parser')
 
 
