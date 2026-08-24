@@ -43,6 +43,8 @@ EQUIPOS = {
 # porque después pide este endpoint, que sí lleva campeonato y torneo en la ruta
 # y devuelve el fragmento HTML con la tabla y las 11 fechas de esa zona.
 BASE = 'https://ligacountrysur.com.ar/liga/tabla-resultados-alt'
+# Detalle de un partido jugado: las 3 canchas, con jugadores y sets.
+DETALLE = 'https://ligacountrysur.com.ar/liga/ver-resultado'
 # Sin User-Agent de navegador el sitio (detrás de Cloudflare) puede no responder.
 CABECERAS = {
     'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 '
@@ -114,6 +116,7 @@ def leer_fixture(sopa):
                 return limpiar(e.get_text()) if e else ''
             marcador = re.search(r'(\d+)\s*[–-]\s*(\d+)', txt('.score-pill'))
             partidos.append({
+                'hash': m.get('data-fixture-hashed') or '',
                 'rueda': rueda, 'dia': dia,
                 'hora': normalizar_hora(txt('.amd-time')),
                 'local': txt('.amd-local'), 'visitor': txt('.amd-visitor'),
@@ -167,6 +170,86 @@ def horarios_publicados(partidos):
     for p in partidos:
         por_fecha.setdefault(p['rueda'], set()).add(p['hora'])
     return {r for r, horas in por_fecha.items() if len({h for h in horas if h}) > 1}
+
+
+def leer_jugadores(texto):
+    """'CAMPOS, RODOLFO (1), Steremberg, Tomas (4)' → dos jugadores con su número.
+
+    Ojo con la coma: separa el apellido del nombre Y separa un jugador del otro,
+    así que no sirve para partir. Lo que sí es inequívoco es el '(n)' del final de
+    cada jugador, que además es su número de orden en la lista de buena fe.
+    """
+    out = []
+    for trozo in re.findall(r'([^()]+)\((\d+)\)', texto or ''):
+        nombre = limpiar(trozo[0]).strip(' ,')
+        if nombre:
+            out.append({'nombre': nombre, 'n': int(trozo[1])})
+    return out
+
+
+def leer_detalle(hash_partido):
+    """Las 3 canchas de un partido jugado: quiénes jugaron y cómo salió cada set.
+
+    Los sets vienen como '6 - 4' con el local a la izquierda. No se usa la clase
+    'won' del HTML para decidir quién ganó: los números alcanzan y no dependen de
+    que la Liga mantenga esa clase.
+    """
+    r = requests.get(f'{DETALLE}/{hash_partido}', headers=CABECERAS, timeout=45)
+    r.raise_for_status()
+    sopa = BeautifulSoup(r.text, 'html.parser')
+    canchas = []
+    for bloque in sopa.select('.dr-tenis-match'):
+        tag = bloque.select_one('.dr-modalidad-tag')
+        num = re.sub(r'\D', '', tag.get_text()) if tag else ''
+        lados = bloque.select('.dr-tenis-side')
+        if len(lados) < 2:
+            continue
+        def jugadores(lado):
+            n = lado.select_one('.dr-tenis-side-name')
+            return leer_jugadores(n.get_text() if n else '')
+        sets = []
+        for s in bloque.select('.dr-set'):
+            m = re.search(r'(\d+)\s*-\s*(\d+)', s.get_text())
+            if m:
+                sets.append([int(m.group(1)), int(m.group(2))])
+        if not sets:
+            continue
+        gl = sum(1 for a, b in sets if a > b)
+        gv = sum(1 for a, b in sets if b > a)
+        canchas.append({'cancha': int(num) if num else len(canchas) + 1,
+                        'local': jugadores(lados[0]), 'visitante': jugadores(lados[1]),
+                        'sets': sets, 'ganoLocal': gl > gv})
+    return canchas
+
+
+def armar_resultados(partidos, eq, fixture):
+    """Detalle jugador por jugador de cada partido jugado, nuestro y del rival.
+
+    Guardar también al rival cuesta lo mismo —la página trae las dos parejas— y
+    permite llegar a una fecha sabiendo quién es quién del otro lado.
+    """
+    nombre = EQUIPOS[eq]['nombre']
+    jugados = {m['rueda'] for m in fixture if m['played']}
+    por_rueda = {p['rueda']: p for p in partidos
+                 if nombre in (p['local'], p['visitor'])}
+    salida = []
+    for rueda in sorted(jugados):
+        p = por_rueda.get(rueda)
+        if not p or not p.get('hash'):
+            avisos.append(f'{eq} F{rueda}: jugado pero sin enlace al detalle')
+            continue
+        try:
+            canchas = leer_detalle(p['hash'])
+        except Exception as e:
+            avisos.append(f'{eq} F{rueda}: no se pudo leer el detalle — {e}')
+            continue
+        if not canchas:
+            avisos.append(f'{eq} F{rueda}: el detalle no tiene canchas cargadas')
+            continue
+        m = next((x for x in fixture if x['rueda'] == rueda), {})
+        salida.append({'id': f'{eq}-{rueda}', 'rueda': rueda, 'fecha': m.get('fecha', ''),
+                       'local': p['local'], 'visitor': p['visitor'], 'canchas': canchas})
+    return salida
 
 
 def armar_fixture(partidos, eq, actual):
@@ -246,6 +329,40 @@ def validar(eq, fixture, tabla):
     return err
 
 
+def validar_resultados(eq, resultados):
+    """Un stat mal atribuido es peor que no tener stats: si algo no cierra, no se
+    escribe. Se le estaría colgando una derrota al jugador equivocado."""
+    nombre = EQUIPOS[eq]['nombre']
+    err = []
+    for p in resultados:
+        d = f'F{p["rueda"]}'
+        if nombre not in (p['local'], p['visitor']):
+            err.append(f'{d}: no jugamos ese partido')
+        if not p['canchas']:
+            err.append(f'{d}: sin canchas')
+        for c in p['canchas']:
+            if c['cancha'] not in (1, 2, 3):
+                err.append(f'{d}: cancha fuera de rango ({c["cancha"]})')
+            for lado in ('local', 'visitante'):
+                if len(c[lado]) != 2:
+                    err.append(f'{d} D{c["cancha"]}: el lado {lado} no tiene 2 jugadores')
+            if not c['sets']:
+                err.append(f'{d} D{c["cancha"]}: sin sets')
+            for s in c['sets']:
+                if len(s) != 2 or not all(isinstance(x, int) and 0 <= x <= 20 for x in s):
+                    err.append(f'{d} D{c["cancha"]}: set con formato raro ({s})')
+                elif s[0] == s[1]:
+                    err.append(f'{d} D{c["cancha"]}: set empatado ({s})')
+        # Las canchas ganadas tienen que dar el mismo marcador que el fixture
+        if p['canchas']:
+            ganadas_local = sum(1 for c in p['canchas'] if c['ganoLocal'])
+            if len(p['canchas']) == 3 and ganadas_local + (3 - ganadas_local) != 3:
+                err.append(f'{d}: las canchas no suman 3')
+        if len({c['cancha'] for c in p['canchas']}) != len(p['canchas']):
+            err.append(f'{d}: canchas repetidas')
+    return err
+
+
 def escribir(ruta, datos, dry):
     nuevo = json.dumps(datos, ensure_ascii=False, separators=(',', ':'))
     anterior = ruta.read_text(encoding='utf-8') if ruta.exists() else None
@@ -296,7 +413,27 @@ def main():
                 print(f'      {e}')
             continue
 
-        for ruta, datos, que in ((rf, fixture, 'fixture'), (rt, tabla, 'tabla')):
+        # Detalle jugador por jugador de los partidos ya jugados. Va después de
+        # validar el fixture: si el fixture no es confiable, el detalle tampoco.
+        rr = raiz / f'resultados-{eq}.json'
+        resultados = armar_resultados(partidos, eq, fixture)
+        previos = json.loads(rr.read_text(encoding='utf-8')) if rr.exists() else []
+        if len(resultados) < len(previos):
+            avisos.append(f'{eq}: el detalle trajo {len(resultados)} partidos y teníamos '
+                          f'{len(previos)}. Se conserva lo anterior.')
+            resultados = previos
+        errs_det = validar_resultados(eq, resultados)
+        if errs_det:
+            fallas.append(f'{eq} detalle: ' + ' · '.join(errs_det))
+            print('  ✗ el detalle no pasa validación:')
+            for e in errs_det:
+                print(f'      {e}')
+            resultados = previos
+        else:
+            print(f'  detalle de {len(resultados)} partido(s) jugado(s)')
+
+        for ruta, datos, que in ((rf, fixture, 'fixture'), (rt, tabla, 'tabla'),
+                                 (rr, resultados, 'detalle')):
             if escribir(ruta, datos, args.dry_run):
                 cambios.append(f'{eq} {que}')
                 print(f'  ✓ {que} actualizado')

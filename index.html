@@ -1076,6 +1076,7 @@
     unreadChat:   0,
     lastChatSeen: parseInt(localStorage.getItem('lastChatSeen') || '0'),
     perfLoaded:   false,
+    rivales:      {},   // scouting del rival, lo llena loadPerformances
     lastFetch:    parseInt(localStorage.getItem('lastFetch') || '0'),
   };
 
@@ -2489,37 +2490,77 @@
   // seguimos mostrando el Apertura 2026 en vez de una pantalla vacía.
   function fixtureHist() { return (ST.fixture && ST.fixture.length) ? ST.fixture : (ST.fixtureLegacy || []); }
 
+  // La Liga escribe los nombres al revés y con criterio propio: "SERAFINI, JAVIER
+  // ALEJANDRO" es nuestro Alejandro Serafini, "fernandez, carlos" es Carlos
+  // Fernández y "Lauria Masaro, Mauro" tiene apellido compuesto.
+  //
+  // Regla: un jugador nuestro corresponde si TODAS las palabras de su nombre en la
+  // LBF aparecen en el nombre que publica la Liga. Si hay más de un candidato se
+  // devuelve null a propósito: colgarle una derrota al jugador equivocado es peor
+  // que no mostrar el dato.
+  function _palabras(s) {
+    return new Set(((s || '').normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .toUpperCase().match(/[A-ZÑ]+/g)) || []);
+  }
+  function emparejarConLBF(nombreLiga) {
+    const t = _palabras(nombreLiga);
+    if (!t.size) return null;
+    // Se buscan en las LBF de los dos equipos: un jugador puede haber subido de
+    // categoría y no estar en la lista del equipo que se está mirando.
+    const todos = [...new Set(TEAM_IDS.flatMap(id => (ST.lbfT[id] || []).map(p => p && p.name).filter(Boolean)))];
+    const cand = todos.filter(n => [..._palabras(n)].every(w => t.has(w)));
+    return cand.length === 1 ? cand[0] : null;
+  }
+
   async function loadPerformances() {
     const played = fixtureHist().filter(m => m.played);
-    if (!played.length) { ST.perfLoaded = true; renderRend(); return; }
+    if (!played.length) { ST.perfLoaded = true; ST.rivales = {}; renderRend(); return; }
     const stats = {};
-    // Fetch todos los partidos en paralelo para no esperar secuencialmente
-    const results = await Promise.allSettled(
-      played.map(m => apiGet(`/resultadopartidotenis_visita.php?NroPartidoCampeonato=${m.id}`))
-    );
-    for (let i = 0; i < played.length; i++) {
-      const data = results[i].status === 'fulfilled' ? results[i].value : null;
-      if (!data || !Array.isArray(data)) continue;
-      for (const c of data) {
-        const eq1isUs = isMyTeam(c.equipo1);
-        const p1 = eq1isUs ? san(c.nombre1) : san(c.nombre3);
-        const p2 = eq1isUs ? san(c.nombre2) : san(c.nombre4);
-        const court = parseInt((c.tipoPartido||'Doble 1').replace(/\D/g,''))||1;
-        const s = [[parseInt(c.set1)||0,parseInt(c.set1_2)||0],[parseInt(c.set2)||0,parseInt(c.set2_2)||0],[parseInt(c.set3)||0,parseInt(c.set3_2)||0]];
-        let ours=0,theirs=0;
-        s.forEach(([a,b]) => { if(a>b) ours++; else if(b>a) theirs++; });
-        if (!eq1isUs) [ours,theirs]=[theirs,ours];
-        const won = ours > theirs;
-        for (const n of [p1,p2]) {
-          if (!n) continue;
-          if (!stats[n]) stats[n]={W:0,L:0,cW:{1:0,2:0,3:0},cL:{1:0,2:0,3:0},pairs:{}};
-          const s2=stats[n];
-          if(won){s2.W++;s2.cW[court]++;}else{s2.L++;s2.cL[court]++;}
-          const partner=n===p1?p2:p1;
-          if(partner){if(!s2.pairs[partner])s2.pairs[partner]={W:0,L:0};if(won)s2.pairs[partner].W++;else s2.pairs[partner].L++;}
-        }
+    const rivales = {};
+    // El detalle jugador por jugador lo deja el robot en resultados-{equipo}.json.
+    // Antes esto le pedía a la Liga cada partido por su número interno, pero
+    // nosotros usamos ids propios (5A-1) y la consulta se iba al vacío: por eso
+    // Stats decía "Sin datos aún" incluso con partidos jugados.
+    const detalle = await fetch(`/app/resultados-${ST.team}.json?t=${Date.now()}`,
+        { cache: 'no-store', signal: _timeoutSignal(8000) })
+      .then(r => r.ok ? r.json() : null)
+      .catch(e => { _falla(e, 'detalle de resultados'); return null; });
+
+    for (const p of (Array.isArray(detalle) ? detalle : [])) {
+      const somosLocal = isMyTeam(p.local);
+      const rival = somosLocal ? p.visitor : p.local;
+      for (const c of (p.canchas || [])) {
+        const nuestros = somosLocal ? c.local : c.visitante;
+        const otros    = somosLocal ? c.visitante : c.local;
+        const ganamos  = somosLocal ? c.ganoLocal : !c.ganoLocal;
+        const court    = [1, 2, 3].includes(c.cancha) ? c.cancha : 1;
+
+        // Los nuestros: se emparejan con la LBF para que el nombre sea el que el
+        // equipo reconoce, no el de la Liga.
+        const nombres = (nuestros || []).map(j => emparejarConLBF(j && j.nombre)).filter(Boolean);
+        nombres.forEach((n, i) => {
+          if (!stats[n]) stats[n] = { W:0, L:0, cW:{1:0,2:0,3:0}, cL:{1:0,2:0,3:0}, pairs:{} };
+          const s = stats[n];
+          if (ganamos) { s.W++; s.cW[court]++; } else { s.L++; s.cL[court]++; }
+          const compa = nombres[1 - i];
+          if (compa) {
+            if (!s.pairs[compa]) s.pairs[compa] = { W:0, L:0 };
+            if (ganamos) s.pairs[compa].W++; else s.pairs[compa].L++;
+          }
+        });
+
+        // Los del rival se guardan tal como los publica la Liga, para poder
+        // llegar a una fecha sabiendo quién es quién del otro lado.
+        (otros || []).forEach(j => {
+          if (!j || !j.nombre) return;
+          if (!rivales[rival]) rivales[rival] = {};
+          const r = rivales[rival][j.nombre] || (rivales[rival][j.nombre] = { W:0, L:0, n:j.n, canchas:{} });
+          if (ganamos) r.L++; else r.W++;
+          r.canchas[court] = (r.canchas[court] || 0) + 1;
+        });
       }
     }
+    ST.rivales = rivales;
     ST.perfs = Object.entries(stats).map(([name,s]) => ({
       name, W:s.W, L:s.L, total:s.W+s.L,
       pct: s.W+s.L>0 ? Math.round(s.W/(s.W+s.L)*100) : 0,
@@ -4293,6 +4334,45 @@
           if(!best) return '';
           return `<div class="perf-row"><div class="perf-name flex1 tsm">${p.name} + ${best.n}</div><div class="ppct" style="color:${pc(best.pct)}">${best.pct}%</div></div>`;
         }).filter(Boolean).join('')}
+      </div>
+      ${_bloqueRival()}`;
+  }
+
+  // Scouting del próximo rival, con lo que ya jugó contra nosotros.
+  // Los nombres van tal como los publica la Liga: son jugadores de otro club y
+  // no tenemos forma de saber cómo se llaman entre ellos.
+  function _bloqueRival() {
+    const nm = nextMatch();
+    if (!nm || !ST.rivales) return '';
+    const r = rival(nm);
+    const datos = ST.rivales[r];
+    if (!datos || !Object.keys(datos).length) return '';
+    const filas = Object.entries(datos)
+      .map(([nombre, d]) => ({
+        nombre, ...d,
+        tot: d.W + d.L,
+        pct: d.W + d.L > 0 ? Math.round(d.W / (d.W + d.L) * 100) : 0,
+        canchas: Object.keys(d.canchas || {}).sort().map(c => 'D' + c).join(' · '),
+      }))
+      .sort((a, b) => b.pct - a.pct || b.tot - a.tot);
+    return `
+      <div class="card">
+        <div class="card-title">🔍 ${esc(r)}</div>
+        <div class="txs tmuted" style="margin-bottom:8px;line-height:1.5;">
+          Lo que jugaron contra nosotros. El número entre paréntesis es su orden en la lista de buena fe.
+        </div>
+        ${filas.map(f => `
+          <div class="prow">
+            <div class="pnum">${f.n || '?'}</div>
+            <div class="flex1">
+              <div class="pname">${esc(f.nombre)}</div>
+              <div class="perf-sub">${f.W}–${f.L} contra nosotros${f.canchas ? ' · jugó ' + f.canchas : ''}</div>
+            </div>
+            <div class="ppct" style="color:${f.pct >= 50 ? 'var(--bordo)' : 'var(--green)'}">${f.pct}%</div>
+          </div>`).join('')}
+        <div class="txs tmuted mt8" style="line-height:1.5;">
+          El porcentaje es lo que ganaron <b>ellos</b>: cuanto más alto, más cuidado.
+        </div>
       </div>`;
   }
 
