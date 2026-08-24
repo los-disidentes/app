@@ -1,0 +1,46 @@
+name: Actualizar datos de la Liga
+
+# Trae fixture y tabla de ligacountrysur.com.ar y los commitea si cambiaron.
+# Antes esto se hacía a mano después de cada fecha, y el equipo veía datos viejos
+# hasta que alguien se acordara de actualizar.
+#
+# 23:00 UTC = 20:00 en Argentina. Los partidos son domingo a la mañana, así que
+# a esa hora los resultados de la fecha ya suelen estar cargados.
+on:
+  schedule:
+    - cron: '0 23 * * *'
+  workflow_dispatch:        # botón "Run workflow" en la pestaña Actions
+
+permissions:
+  contents: write
+
+jobs:
+  actualizar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Instalar dependencias
+        run: pip install --quiet requests beautifulsoup4
+
+      - name: Leer la Liga y actualizar los JSON
+        run: python actualizar-liga.py
+
+      # El script sólo escribe si los datos pasan todas las validaciones, así que
+      # si hay cambios en el árbol es porque son datos buenos.
+      - name: Commitear si hubo cambios
+        run: |
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "Sin cambios: la Liga no publicó nada nuevo."
+            exit 0
+          fi
+          git config user.name  "Robot de la Liga"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add fixture-5A.json fixture-5B.json standings-5A.json standings-5B.json
+          git commit -m "Datos de la Liga actualizados automáticamente"
+          git push
+          echo "Datos actualizados y publicados."
