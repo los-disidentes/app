@@ -2537,15 +2537,31 @@
 
         // Los nuestros: se emparejan con la LBF para que el nombre sea el que el
         // equipo reconoce, no el de la Liga.
+        // Games y sets, no sólo ganó/perdió: perder 6-4 6-3 no es lo mismo que
+        // perder 6-0 6-0, y con pocos partidos jugados la diferencia entre
+        // "peleó" y "no entró en partido" es la única señal útil que hay.
+        const sets = Array.isArray(c.sets) ? c.sets : [];
+        let gf = 0, gc = 0, sf = 0, sc = 0;
+        for (const s of sets) {
+          if (!Array.isArray(s) || s.length !== 2) continue;
+          const [a, b] = somosLocal ? s : [s[1], s[0]];
+          gf += a; gc += b;
+          if (a > b) sf++; else if (b > a) sc++;
+        }
+
         const nombres = (nuestros || []).map(j => emparejarConLBF(j && j.nombre)).filter(Boolean);
         nombres.forEach((n, i) => {
-          if (!stats[n]) stats[n] = { W:0, L:0, cW:{1:0,2:0,3:0}, cL:{1:0,2:0,3:0}, pairs:{} };
+          if (!stats[n]) stats[n] = { W:0, L:0, cW:{1:0,2:0,3:0}, cL:{1:0,2:0,3:0},
+                                      gf:0, gc:0, sf:0, sc:0, pairs:{} };
           const s = stats[n];
           if (ganamos) { s.W++; s.cW[court]++; } else { s.L++; s.cL[court]++; }
+          s.gf += gf; s.gc += gc; s.sf += sf; s.sc += sc;
           const compa = nombres[1 - i];
           if (compa) {
-            if (!s.pairs[compa]) s.pairs[compa] = { W:0, L:0 };
-            if (ganamos) s.pairs[compa].W++; else s.pairs[compa].L++;
+            if (!s.pairs[compa]) s.pairs[compa] = { W:0, L:0, gf:0, gc:0 };
+            const pr = s.pairs[compa];
+            if (ganamos) pr.W++; else pr.L++;
+            pr.gf += gf; pr.gc += gc;
           }
         });
 
@@ -2564,8 +2580,13 @@
     ST.perfs = Object.entries(stats).map(([name,s]) => ({
       name, W:s.W, L:s.L, total:s.W+s.L,
       pct: s.W+s.L>0 ? Math.round(s.W/(s.W+s.L)*100) : 0,
+      gf:s.gf, gc:s.gc, sf:s.sf, sc:s.sc,
+      // Rendimiento: qué porción de los games se llevó. Con un solo partido
+      // jugado, el porcentaje de victorias sólo puede dar 0 % o 100 %; esto
+      // distingue al que peleó del que no entró en partido.
+      rend: s.gf+s.gc>0 ? Math.round(s.gf/(s.gf+s.gc)*100) : 0,
       cW:s.cW, cL:s.cL, pairs:s.pairs,
-    })).sort((a,b) => b.pct-a.pct||b.total-a.total);
+    })).sort((a,b) => b.pct-a.pct || b.rend-a.rend || b.total-a.total);
     ST.perfLoaded = true;
     renderRend();
   }
@@ -2601,7 +2622,19 @@
     return { d1:sorted[0].pair, d1s:sorted[0].sum, d2:sorted[1].pair, d2s:sorted[1].sum, d3:sorted[2].pair, d3s:sorted[2].sum };
   }
 
-  function pairPerf(n1,n2) { const p=ST.perfs.find(x=>x.name===n1); if(!p||!p.pairs[n2]) return 0; const pr=p.pairs[n2],tot=pr.W+pr.L; return tot>0?pr.W/tot:0; }
+  // Qué tan bien le fue a una dupla, de 0 a 1. Ganar es lo que suma parciales
+  // (Art. 15), así que pesa más; pero los games desempatan entre duplas con el
+  // mismo récord: perder 6-4 6-3 dice algo muy distinto que perder 6-0 6-0, y
+  // con dos o tres fechas jugadas es la única señal fina disponible.
+  function pairPerf(n1, n2) {
+    const p = ST.perfs.find(x => x.name === n1);
+    if (!p || !p.pairs[n2]) return 0;
+    const pr = p.pairs[n2], tot = pr.W + pr.L, games = (pr.gf || 0) + (pr.gc || 0);
+    if (!tot) return 0;
+    const victorias = pr.W / tot;
+    const rendimiento = games > 0 ? (pr.gf || 0) / games : victorias;
+    return 0.75 * victorias + 0.25 * rendimiento;
+  }
   function playerPct(name)  { const p=ST.perfs.find(x=>x.name===name); return p?p.pct:50; }
 
   function suggestFormations(confirmed, count=5) {
@@ -4314,10 +4347,13 @@
             <div class="perf-rank ${i<3?'top':''}">${i+1}</div>
             <div class="flex1">
               <div class="perf-name">${p.name}</div>
-              <div class="perf-sub">${p.W} victorias · ${p.L} derrotas · ${p.total} partidos</div>
+              <div class="perf-sub">${p.W} ${p.W===1?'victoria':'victorias'} · ${p.L} ${p.L===1?'derrota':'derrotas'}${p.gf+p.gc>0?` · ${p.gf} de ${p.gf+p.gc} games`:''}</div>
             </div>
-            <div class="pbar-w"><div class="pbar ${pcl(p.pct)}" style="width:${p.pct}%"></div></div>
-            <div class="ppct" style="color:${pc(p.pct)}">${p.pct}%</div>
+            <div class="pbar-w"><div class="pbar ${pcl(p.rend)}" style="width:${p.rend}%"></div></div>
+            <div style="text-align:right;min-width:52px;">
+              <div class="ppct" style="color:${pc(p.rend)}">${p.rend}%</div>
+              <div class="txs tmuted" style="font-size:.6rem;">rendim.</div>
+            </div>
           </div>`).join('')}
       </div>
       <div class="card">
@@ -4330,9 +4366,13 @@
       <div class="card">
         <div class="card-title">🤝 Mejores duplas</div>
         ${ST.perfs.map(p=>{
-          const best=Object.entries(p.pairs||{}).map(([n,r])=>({n,pct:r.W+r.L>0?Math.round(r.W/(r.W+r.L)*100):0,tot:r.W+r.L})).filter(x=>x.tot>=2).sort((a,b)=>b.pct-a.pct)[0];
+          const best=Object.entries(p.pairs||{}).map(([n,r])=>{
+            const tot=r.W+r.L, g=(r.gf||0)+(r.gc||0);
+            return {n, tot, pct: tot>0?Math.round(r.W/tot*100):0,
+                    rend: g>0?Math.round((r.gf||0)/g*100):0, gf:r.gf||0, gc:r.gc||0};
+          }).filter(x=>x.tot>=2).sort((a,b)=>b.pct-a.pct||b.rend-a.rend)[0];
           if(!best) return '';
-          return `<div class="perf-row"><div class="perf-name flex1 tsm">${p.name} + ${best.n}</div><div class="ppct" style="color:${pc(best.pct)}">${best.pct}%</div></div>`;
+          return `<div class="perf-row"><div class="flex1"><div class="perf-name tsm">${p.name} + ${best.n}</div><div class="perf-sub">${best.tot} juntos · ${best.gf} de ${best.gf+best.gc} games</div></div><div class="ppct" style="color:${pc(best.pct)}">${best.pct}%</div></div>`;
         }).filter(Boolean).join('')}
       </div>
       ${_bloqueRival()}`;
