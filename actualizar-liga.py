@@ -143,10 +143,37 @@ def leer_tabla(sopa):
     return filas
 
 
+def horarios_publicados(partidos):
+    """Devuelve las fechas cuyo horario es de verdad.
+
+    La Liga muestra 10:00 en todos los partidos de una fecha cuando todavía no
+    cargó los horarios: es su valor por defecto, no un horario real. Se vio en
+    las dos zonas a la vez, y contradecía la planilla oficial que sí tenía
+    horarios variados para Quinta A.
+
+    El criterio: una fecha con horarios de verdad tiene variedad. Si los 6
+    partidos de la fecha están todos a la misma hora, es el relleno.
+    Comprobado contra los datos reales: la fecha 1 de Quinta A tiene 09:30 y
+    10:00, y la de Quinta B tiene 10:00, 11:00, 11:30, 12:00 y 14:30 — las dos
+    quedan como publicadas. Las fechas 2 a 11 de ambas zonas son todas 10:00 y
+    quedan como no publicadas.
+
+    Si la Liga alguna vez programa una fecha entera a la misma hora, la vamos a
+    tratar como no publicada. Es el error barato: la app dice "todavía no hay
+    horarios" en vez de afirmar un choque que quizás no existe, y el capitán no
+    se queda sin poder subir a nadie por un dato inventado.
+    """
+    por_fecha = {}
+    for p in partidos:
+        por_fecha.setdefault(p['rueda'], set()).add(p['hora'])
+    return {r for r, horas in por_fecha.items() if len({h for h in horas if h}) > 1}
+
+
 def armar_fixture(partidos, eq, actual):
     """Deja el fixture con nuestros partidos, conservando id y año.
     Se empareja por número de fecha, que es lo único estable."""
     nombre = EQUIPOS[eq]['nombre']
+    con_horario = horarios_publicados(partidos)
     mios = [p for p in partidos if nombre in (p['local'], p['visitor'])]
     por_rueda = {p['rueda']: p for p in mios}
     previos = {m['rueda']: m for m in actual}
@@ -158,7 +185,8 @@ def armar_fixture(partidos, eq, actual):
         if viejo.get('fecha') and fecha != viejo['fecha']:
             avisos.append(f'{eq} F{rueda}: la Liga movió la fecha, {viejo["fecha"]} → {fecha}')
         salida.append({'id': f'{eq}-{rueda}', 'rueda': rueda, 'fecha': fecha,
-                       'hora': p['hora'], 'local': p['local'], 'visitor': p['visitor'],
+                       'hora': p['hora'] if rueda in con_horario else '',
+                       'local': p['local'], 'visitor': p['visitor'],
                        'gL': p['gL'], 'gV': p['gV'], 'played': p['played']})
     return salida
 
