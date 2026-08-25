@@ -193,6 +193,16 @@ def leer_detalle(hash_partido):
     Los sets vienen como '6 - 4' con el local a la izquierda. No se usa la clase
     'won' del HTML para decidir quién ganó: los números alcanzan y no dependen de
     que la Liga mantenga esa clase.
+
+    OJO CON EL TIEBREAK (esto rompió la Quinta B el 24/08/2026).
+    Cada cancha puede traer una fila extra rotulada 'TB' además de '1°', '2°', '3°'.
+    Cuando el partido se definió en dos sets, algunos cargadores la dejan igual en
+    cero: 'TB 0 - 0'. Esa fila NO es un set. Contarla como tal hacía que la
+    validación rechazara el partido entero por 'set empatado' y la 5B se quedaba
+    sin estadísticas. Y cuando el TB sí tiene números (super tiebreak, 10-8)
+    tampoco son games: define la cancha pero no mide rendimiento. Por eso se
+    guarda aparte, en 'tb', y sólo se usa para desempatar 'ganoLocal'.
+    El rótulo vive en el <span> interno; es lo único que distingue un set del TB.
     """
     r = requests.get(f'{DETALLE}/{hash_partido}', headers=CABECERAS, timeout=45)
     r.raise_for_status()
@@ -207,18 +217,37 @@ def leer_detalle(hash_partido):
         def jugadores(lado):
             n = lado.select_one('.dr-tenis-side-name')
             return leer_jugadores(n.get_text() if n else '')
-        sets = []
+        sets, tb = [], None
         for s in bloque.select('.dr-set'):
-            m = re.search(r'(\d+)\s*-\s*(\d+)', s.get_text())
-            if m:
-                sets.append([int(m.group(1)), int(m.group(2))])
+            etiqueta = s.select_one('span')
+            rotulo = (etiqueta.get_text() if etiqueta else '').strip().upper()
+            cuerpo = s.get_text()
+            if etiqueta:
+                cuerpo = cuerpo.replace(etiqueta.get_text(), '', 1)
+            m = re.search(r'(\d+)\s*-\s*(\d+)', cuerpo)
+            if not m:
+                continue
+            par = [int(m.group(1)), int(m.group(2))]
+            if 'TB' in rotulo:
+                if par != [0, 0]:      # 0-0 = no se jugó, es un casillero vacío
+                    tb = par
+            else:
+                sets.append(par)
         if not sets:
             continue
         gl = sum(1 for a, b in sets if a > b)
         gv = sum(1 for a, b in sets if b > a)
-        canchas.append({'cancha': int(num) if num else len(canchas) + 1,
-                        'local': jugadores(lados[0]), 'visitante': jugadores(lados[1]),
-                        'sets': sets, 'ganoLocal': gl > gv})
+        if tb:
+            if tb[0] > tb[1]:
+                gl += 1
+            elif tb[1] > tb[0]:
+                gv += 1
+        cancha = {'cancha': int(num) if num else len(canchas) + 1,
+                  'local': jugadores(lados[0]), 'visitante': jugadores(lados[1]),
+                  'sets': sets, 'ganoLocal': gl > gv}
+        if tb:
+            cancha['tb'] = tb
+        canchas.append(cancha)
     return canchas
 
 
@@ -353,11 +382,14 @@ def validar_resultados(eq, resultados):
                     err.append(f'{d} D{c["cancha"]}: set con formato raro ({s})')
                 elif s[0] == s[1]:
                     err.append(f'{d} D{c["cancha"]}: set empatado ({s})')
-        # Las canchas ganadas tienen que dar el mismo marcador que el fixture
-        if p['canchas']:
-            ganadas_local = sum(1 for c in p['canchas'] if c['ganoLocal'])
-            if len(p['canchas']) == 3 and ganadas_local + (3 - ganadas_local) != 3:
-                err.append(f'{d}: las canchas no suman 3')
+            # El tiebreak es opcional. Si está, tiene que tener un ganador: el
+            # casillero vacío (0-0) ya lo descartó leer_detalle.
+            t = c.get('tb')
+            if t is not None:
+                if len(t) != 2 or not all(isinstance(x, int) and 0 <= x <= 30 for x in t):
+                    err.append(f'{d} D{c["cancha"]}: tiebreak con formato raro ({t})')
+                elif t[0] == t[1]:
+                    err.append(f'{d} D{c["cancha"]}: tiebreak empatado ({t})')
         if len({c['cancha'] for c in p['canchas']}) != len(p['canchas']):
             err.append(f'{d}: canchas repetidas')
     return err
