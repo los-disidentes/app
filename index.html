@@ -2502,13 +2502,35 @@
     return new Set(((s || '').normalize('NFD').replace(/[̀-ͯ]/g, '')
       .toUpperCase().match(/[A-ZÑ]+/g)) || []);
   }
+  // ¿La palabra `w` de la LBF se corresponde con alguno de los tokens `t` del
+  // nombre que publica la Liga? Además de la igualdad, se acepta el apodo: uno
+  // es prefijo del otro y el corto tiene 4+ letras ("SEBAS" ↔ "SEBASTIAN").
+  // El piso de 4 letras evita que iniciales o partículas emparejen cualquier
+  // cosa; la exigencia de candidato único de abajo hace el resto del trabajo.
+  function _palabraCoincide(w, t) {
+    if (t.has(w)) return true;
+    for (const x of t) {
+      if (w.length >= 4 && x.startsWith(w)) return true;
+      if (x.length >= 4 && w.startsWith(x)) return true;
+    }
+    return false;
+  }
+
   function emparejarConLBF(nombreLiga) {
     const t = _palabras(nombreLiga);
     if (!t.size) return null;
     // Se buscan en las LBF de los dos equipos: un jugador puede haber subido de
     // categoría y no estar en la lista del equipo que se está mirando.
     const todos = [...new Set(TEAM_IDS.flatMap(id => (ST.lbfT[id] || []).map(p => p && p.name).filter(Boolean)))];
-    const cand = todos.filter(n => [..._palabras(n)].every(w => t.has(w)));
+    // Primero exacto. Sólo si no hay ninguno se afloja a apodos: así un apodo
+    // nunca le gana a una coincidencia literal.
+    const exactos = todos.filter(n => [..._palabras(n)].every(w => t.has(w)));
+    if (exactos.length === 1) return exactos[0];
+    if (exactos.length > 1) return null;
+    const cand = todos.filter(n => {
+      const p = [..._palabras(n)];
+      return p.length > 0 && p.every(w => _palabraCoincide(w, t));
+    });
     return cand.length === 1 ? cand[0] : null;
   }
 
