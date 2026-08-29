@@ -2885,6 +2885,21 @@
       .map(([k]) => k)
       .sort((a,b) => posEnLBF(a,'5B') - posEnLBF(b,'5B'));   // Art. 2.11: entre ellos, orden de su categoría
   }
+  // Art. 2.11, textual: "Todo jugador que durante el transcurso del torneo pase a
+  // integrar una categoría superior ingresará a continuación del último número de
+  // orden de la lista inicial de buena fe. Si para un mismo partido sube más de un
+  // jugador tomarán ambos el número consecutivo, pero formarán respetando el orden
+  // de la categoría de donde provienen."
+  //
+  // Vive acá y en ningún otro lado. Antes el número del refuerzo se calculaba por
+  // separado en las sugerencias y en el armado manual, y el simulador directamente
+  // no lo contemplaba: marcabas 6 con un refuerzo entre ellos y no devolvía ninguna
+  // formación, sin decir por qué.
+  function refuerzosDeLaFecha() {
+    const ultimo = ST.lbf.length;   // último número de orden de la lista inicial
+    return subidosConfirmados().map((n, j) => ({ name: n, lbfPos: ultimo + 1 + j, subido: true }));
+  }
+
   function posEnLBF(nombre, team) {
     const i = (ST.lbfT[team] || []).findIndex(p => p && normalizeName(p.name||'') === normalizeName(nombre));
     return i < 0 ? 999 : i;
@@ -3133,11 +3148,13 @@
     if(!nm){wrap.innerHTML='<div class="empty"><div class="ei">📅</div><h3>Sin partidos</h3></div>';return;}
     const confNames=Object.entries(ST.attendance).filter(([,v])=>v.status==='confirmed').map(([k])=>k);
     // Presentes de la LBF propia, renumerados 1..N por orden de lista (Art. 19)
-    const _propios=ST.lbf.filter(p=>p.active&&confNames.includes(p.name)).map((p,i)=>({name:p.name,lbfPos:p.lbfPosition||(i+1),mn:i+1}));
-    // Art. 2.11: los que suben entran a continuación del último número de orden,
-    // y entre ellos respetan el orden de la categoría de la que vienen.
-    const _subidos=subidosConfirmados().map((n,j)=>({name:n,lbfPos:900+j,mn:_propios.length+j+1,subido:true}));
-    const confirmed=_propios.concat(_subidos);
+    const _propios=ST.lbf.filter(p=>p.active&&confNames.includes(p.name)).map((p,i)=>({name:p.name,lbfPos:p.lbfPosition||(i+1),subido:false}));
+    // Art. 19: los presentes se renumeran 1..N por orden de LBF. Los refuerzos ya
+    // vienen con su lbfPos correcto del Art. 2.11, así que ordenar y numerar
+    // alcanza: no hay que tratarlos aparte.
+    const confirmed=_propios.concat(refuerzosDeLaFecha())
+      .sort((a,b)=>a.lbfPos-b.lbfPos)
+      .map((p,i)=>({...p,mn:i+1}));
     if(ST.formation?.locked){
       const f=ST.formation;
       wrap.innerHTML=`
@@ -3327,10 +3344,11 @@
 
   function _confirmadosParaManual() {
     const conf = Object.entries(ST.attendance).filter(([,v]) => v && v.status === 'confirmed').map(([k]) => k);
+    // El fallback era 999, que mandaba al final de la lista a un jugador propio sin
+    // lbfPosition — detrás de los refuerzos, al revés de lo que dice el Art. 2.11.
     const propios = ST.lbf.filter(p => p.active && conf.includes(p.name))
-      .map(p => ({ name: p.name, lbfPos: p.lbfPosition || 999 }));
-    const subs = subidosConfirmados().map((n, j) => ({ name: n, lbfPos: 900 + j, subido: true }));
-    return propios.concat(subs);
+      .map((p, i) => ({ name: p.name, lbfPos: p.lbfPosition || (i + 1), subido: false }));
+    return propios.concat(refuerzosDeLaFecha());
   }
 
   // Todos los que el capitán puede poner en una pareja: los que confirmaron más
@@ -3346,7 +3364,7 @@
     const nombres = yaEstan.map(p => p.name);
     const pendientes = ST.lbf
       .filter(p => p.active && nombres.indexOf(p.name) === -1 && est(p.name) !== 'declined')
-      .map(p => ({ name: p.name, lbfPos: p.lbfPosition || 999, sinConfirmar: true }));
+      .map((p, i) => ({ name: p.name, lbfPos: p.lbfPosition || (i + 1), sinConfirmar: true }));
     return yaEstan.concat(pendientes).sort((a, b) => a.lbfPos - b.lbfPos);
   }
 
@@ -3888,10 +3906,10 @@
   // Art. 19: los presentes se renumeran 1–N por LBF; los 6 que juegan conservan
   // ese número (no se renumeran de nuevo 1–6), que es lo que define las sumas.
   function simulateFormations(nombres, topN = 8, sinRanking = false) {
-    const pool = ST.lbf
+    const pool = _plantelSimulable()
       .filter(p => nombres.includes(p.name))
-      .sort((a, b) => (a.lbfPosition || 999) - (b.lbfPosition || 999))
-      .map((p, i) => ({ name: p.name, lbfPos: p.lbfPosition || (i + 1), mn: i + 1 }));
+      .sort((a, b) => a.lbfPos - b.lbfPos)
+      .map((p, i) => ({ name: p.name, lbfPos: p.lbfPos, mn: i + 1, subido: p.subido }));
     if (pool.length < 6) return [];
 
     let combos = _combinations(pool, 6);
@@ -4025,7 +4043,7 @@
   function _appendSimulador() {
     const wrap = document.getElementById('parejas-content');
     if (!wrap || !ST.isAdmin) return;
-    const activos = ST.lbf.filter(p => p.active);
+    const activos = _plantelSimulable();
     const n = _simSel.length;
     const combis = n >= 6 ? _combinations(new Array(n).fill(0), 6).length : 0;
 
@@ -4042,7 +4060,7 @@
             <button class="chip ${_simSel.includes(p.name) ? 'cg' : ''}"
               style="cursor:pointer;border:1px solid ${_simSel.includes(p.name) ? 'var(--green)' : 'var(--line)'};padding:6px 10px;background:${_simSel.includes(p.name) ? 'var(--mint)' : 'transparent'};"
               onclick="simToggle('${p.name.replace(/'/g, "\\'")}')">
-              ${p.lbfPosition}. ${esc(p.name)}
+              ${p.lbfPos}. ${esc(p.name)}${p.subido ? ' ↑' : ''}
             </button>`).join('')}
         </div>
         <div class="flex" style="gap:8px;align-items:center;flex-wrap:wrap;">
@@ -4074,7 +4092,16 @@
     renderParejas();
   }
   function simToggleRanking() { _simSinRanking = !_simSinRanking; _simResults = []; renderParejas(); }
-  function simTodos()   { _simSel = ST.lbf.filter(p => p.active).map(p => p.name); renderParejas(); }
+  // Todo el que puede jugar la fecha: la LBF activa más los refuerzos del Art. 2.11.
+  // El simulador es una herramienta de "qué pasaría si", así que no filtra por
+  // asistencia — pero sí tiene que poder incluir al refuerzo, que es justamente
+  // el que más cambia las sumas del Art. 13.
+  function _plantelSimulable() {
+    return ST.lbf.filter(p => p.active)
+      .map((p, i) => ({ name: p.name, lbfPos: p.lbfPosition || (i + 1), subido: false }))
+      .concat(refuerzosDeLaFecha());
+  }
+  function simTodos()   { _simSel = _plantelSimulable().map(p => p.name); renderParejas(); }
   function simLimpiar() { _simSel = []; _simResults = []; renderParejas(); }
 
   function simCorrer() {
