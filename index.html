@@ -2534,6 +2534,9 @@
     return cand.length === 1 ? cand[0] : null;
   }
 
+  // Evita que dos renders seguidos disparen dos veces el mismo fetch.
+  let _cargandoPerfs = false;
+
   async function loadPerformances() {
     const played = fixtureHist().filter(m => m.played);
     if (!played.length) { ST.perfLoaded = true; ST.rivales = {}; renderRend(); return; }
@@ -3113,6 +3116,19 @@
   function _renderParejasCore() {
     const wrap=document.getElementById('parejas-content'),nm=nextMatch();
     if(!wrap) return;
+    // ST.perfs lo llenaba SOLAMENTE la pestaña Stats, pero esta pantalla lo usa
+    // en tres lugares: el historial de cada dupla, el ranking que decide la ⭐ y
+    // el scouting del rival. El capitán que entraba derecho a Parejas veía
+    // "Sin historial juntos" en duplas que ya habían jugado juntas, y elegía la
+    // formación a ciegas. Se dispara la carga acá y se vuelve a dibujar cuando
+    // llega: la pantalla no espera, igual que con cargarExcepcion4().
+    if (!ST.perfLoaded && !_cargandoPerfs) {
+      _cargandoPerfs = true;
+      loadPerformances().finally(() => {
+        _cargandoPerfs = false;
+        if (ST.activeTab === 'parejas') renderParejas();
+      });
+    }
     if(!ST.fixture.length){ wrap.innerHTML = esperandoLiga('<p class="wl-hist">El simulador de formaciones sigue disponible más abajo.</p>'); return; }
     if(!nm){wrap.innerHTML='<div class="empty"><div class="ei">📅</div><h3>Sin partidos</h3></div>';return;}
     const confNames=Object.entries(ST.attendance).filter(([,v])=>v.status==='confirmed').map(([k])=>k);
