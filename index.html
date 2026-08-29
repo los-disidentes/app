@@ -3101,6 +3101,15 @@
     _appendSimulador();
   }
 
+  // El botón de confirmar sale por acá y no como ternario dentro del template
+  // de las tarjetas: ahí ya hay dos niveles de backticks anidados y meter un
+  // tercero lo vuelve ilegible. Las 15 formaciones las sigue viendo todo el
+  // equipo —es información útil— y lo que queda restringido es confirmarlas.
+  function _btnConfirmar(idx, mejor) {
+    if (!esCapitan()) return '';
+    return `<button class="btn ${mejor?'btn-p':'btn-o btn-sm'} w100 mt8" onclick="lockFormation(${idx})">${mejor?'🔒 Confirmar esta formación':'Usar esta'}</button>`;
+  }
+
   function _renderParejasCore() {
     const wrap=document.getElementById('parejas-content'),nm=nextMatch();
     if(!wrap) return;
@@ -3260,9 +3269,7 @@
                 <div class="csum">Σ${sum}</div>
               </div>`;
             }).join('')}
-            <button class="btn ${mejor?'btn-p':'btn-o btn-sm'} w100 mt8" onclick="lockFormation(${idx})">
-              ${mejor?'🔒 Confirmar esta formación':'Usar esta'}
-            </button>
+            ${_btnConfirmar(idx, mejor)}
           </div>`; }).join('')}
       `).join(''); })()}
       <div class="card mt14">
@@ -4196,6 +4203,11 @@
   // idx = índice de una formación sugerida, o directamente el objeto de la
   // formación (así el armado manual reusa exactamente el mismo guardado).
   async function lockFormation(idx) {
+    // El Art. 16.1 le carga al capitán la sanción por formación no reglamentaria,
+    // así que la confirmación es suya. El chequeo va acá y no sólo en el render:
+    // el 28/08/2026 un jugador sin rol confirmó la formación de 5ta B porque el
+    // botón se dibujaba para todo el equipo. Proteger la pantalla no alcanza.
+    if (!esCapitan()) { toast('Solo el capitán puede confirmar la formación'); return; }
     const nm=nextMatch(); if(!nm) return;
     const wrap=document.getElementById('parejas-content');
     const f = (idx && typeof idx === 'object' && idx.d1) ? idx : wrap._formations?.[idx];
@@ -4238,6 +4250,7 @@
   }
 
   async function unlockFormation() {
+    if (!esCapitan()) { toast('Solo el capitán puede desbloquear la formación'); return; }
     const nm=nextMatch(); if(!nm) return;
     try {
       if (ST.fbOK && ST.fbDb) {
