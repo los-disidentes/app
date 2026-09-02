@@ -1,8 +1,17 @@
-name: Actualizar datos de la liga
+name: Actualizar datos de la liga (legacy, a mano)
 
+# Este robot escribe fixture.json, standings.json y results/, que son los
+# archivos del modelo viejo, de antes de separar los datos por equipo. La app
+# ya no los lee salvo como respaldo si falla el proxy de la Liga, y encima
+# consultan el campeonato 2155, que es el Apertura ya terminado.
+#
+# Corría cada 2 horas actualizando archivos que casi nadie mira, mientras el
+# robot que genera los datos que la app SÍ usa (actualizar-liga.yml) corría una
+# vez por día. Estaba exactamente al revés.
+#
+# Se le saca el horario y queda disponible a mano desde la pestaña Actions. No
+# se borra: el respaldo sigue sirviendo el día que el proxy se caiga.
 on:
-  schedule:
-    - cron: '0 */2 * * *'   # cada 2 horas
   workflow_dispatch:
 
 jobs:

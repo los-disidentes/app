@@ -1,14 +1,23 @@
 name: Actualizar datos de la Liga
 
-# Trae fixture y tabla de ligacountrysur.com.ar y los commitea si cambiaron.
-# Antes esto se hacía a mano después de cada fecha, y el equipo veía datos viejos
-# hasta que alguien se acordara de actualizar.
+# Trae fixture, tabla y resultados de ligacountrysur.com.ar y los commitea si
+# cambiaron. Antes esto se hacía a mano después de cada fecha, y el equipo veía
+# datos viejos hasta que alguien se acordara de actualizar.
 #
-# 23:00 UTC = 20:00 en Argentina. Los partidos son domingo a la mañana, así que
-# a esa hora los resultados de la fecha ya suelen estar cargados.
+# Corría una sola vez por día, a las 23:00 UTC (20:00 en Argentina), asumiendo
+# que a esa hora los resultados del domingo ya estaban cargados. No es así: la
+# Liga los carga cuando puede, y a veces al día siguiente.
+#
+# Qué pasó el 30/08/2026: la 5ta A ganó 2-1 y Pablo Aeid ganó su doble 6-0 6-1.
+# El robot corrió a las 22:03 y la Liga todavía no lo había publicado. Hasta la
+# corrida del día siguiente la app mostró a los dos ganadores con 0% de
+# victorias. Con los stats mintiendo un día entero, el equipo deja de creerles.
+#
+# Cada 2 horas. El script sólo commitea si los datos cambiaron, así que las
+# corridas en las que la Liga no publicó nada no dejan ruido en el historial.
 on:
   schedule:
-    - cron: '0 23 * * *'
+    - cron: '0 */2 * * *'
   workflow_dispatch:        # botón "Run workflow" en la pestaña Actions
 
 permissions:
