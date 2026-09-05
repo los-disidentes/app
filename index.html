@@ -2680,13 +2680,18 @@
   }
   function playerPct(name)  { const p=ST.perfs.find(x=>x.name===name); return p?p.pct:50; }
 
-  function suggestFormations(confirmed, count=5) {
+  // soloDosCanchas: cuando el RIVAL se presenta con 4, el D3 no se juega y es
+  // nuestro. Puntuar esa cancha premiaría formaciones que gastan buenos jugadores
+  // donde ya está ganado, así que se puntúan sólo D1 y D2 y la ⭐ empuja a
+  // concentrar la fuerza en las dos canchas que se juegan de verdad.
+  function suggestFormations(confirmed, count=5, soloDosCanchas=false) {
     if (confirmed.length<6) return [];
+    const _canchas = soloDosCanchas ? ['d1','d2'] : ['d1','d2','d3'];
     const formations = getAllPairings(confirmed).map(pairing => {
       const courts = assignCourts(pairing);
       let perf=0;
-      [[courts.d1],[courts.d2],[courts.d3]].forEach(([pair],ci)=>{
-        const p=[courts.d1,courts.d2,courts.d3][ci];
+      _canchas.forEach(k=>{
+        const p=courts[k];
         perf += pairPerf(p[0].name,p[1].name);
         perf += (playerPct(p[0].name)+playerPct(p[1].name))/200;
       });
@@ -3189,6 +3194,7 @@
               <div class="cplayers flex1"><strong>Se pierde</strong><small>Presentación con 4 jugadores</small></div>
             </div>
             <div class="man-warn" style="margin-top:8px;">⚠️ <b>Art. 16.10</b> — es la única excepción del torneo. Avisá al rival y a la Liga como mínimo el día anterior, o no cuenta como excepción.</div>`:''}
+          ${f.rivalIncompleto?`<div class="man-info" style="margin-top:8px;">🎾 <b>El rival se presenta con 4.</b> El doble 3 no se juega y es nuestro; la excepción del Art. 16.10 la gastó el rival, no nosotros. Igual se presentan los 6: la pareja del D3 firma la planilla.${f.rivalIncompleto.by?` Anotado por ${esc(f.rivalIncompleto.by)}.`:''}</div>`:''}
           <div class="txs tmuted mt8">Confirmada por ${f.lockedBy||'—'}</div>
           ${ST.isAdmin?`<button class="btn btn-p btn-sm w100 mt8" onclick="publicarFormacionEnNovedades()">📣 Publicar en Novedades</button>
           <button class="btn btn-d btn-sm w100 mt8" onclick="unlockFormation()">Desbloquear formación</button>`:''}
@@ -3262,7 +3268,8 @@
     // muestran TODAS. Antes se mostraban 5 y cualquier criterio de recorte dejaba
     // afuera opciones válidas — el nº1 puede jugar D2 en 3 de las 15 y ninguna de
     // esas aparecía nunca. Que el capitán vea todo y elija él.
-    const _todas = suggestFormations(confirmed, 999);
+    const _rival4 = rivalIncompleto();
+    const _todas = suggestFormations(confirmed, 999, _rival4);
     // Agrupadas por con quién juega el nº1: es lo primero que mira el capitán.
     const _grupos = new Map();
     _todas.forEach(f => { const k=_companeroDel1(f); if(!_grupos.has(k)) _grupos.set(k,[]); _grupos.get(k).push(f); });
@@ -3285,6 +3292,19 @@
         ${confirmed.map(p=>`<div class="prow"><div class="pnum">${p.mn}</div><div class="pname flex1">${p.name}</div></div>`).join('')}
         ${confirmed.length>6?`<div class="txs tgrape mt8">⚠️ ${confirmed.length} confirmados — el capitán elige 6.</div>`:''}
       </div>
+      ${esCapitan() ? `
+        <div class="card" style="${_rival4?'border-color:var(--green);':''}">
+          <div class="flex" style="justify-content:space-between;align-items:center;gap:8px;">
+            <div class="card-title" style="margin:0;">🎾 El rival se presenta con 4</div>
+            <button class="btn ${_rival4?'btn-d':'btn-o'} btn-sm" onclick="marcarRivalIncompleto(${_rival4?'false':'true'})">${_rival4?'Quitar':'Marcar'}</button>
+          </div>
+          <div class="txs tmuted mt8" style="line-height:1.5;">
+            ${_rival4
+              ? `El <b>doble 3 no se juega y es nuestro</b>: la excepción del Art. 16.10 la gasta el rival, no nosotros. Las formaciones se ordenan por D1 y D2, que son las que se juegan. <b>Igual hay que presentar los 6</b> — la pareja del D3 firma la planilla.`
+              : `Marcalo sólo si el rival avisó que presenta 4 jugadores. No consume nuestra excepción del torneo.`}
+          </div>
+          ${_rival4 && ST.formation?.rivalIncompleto?.by ? `<div class="txs tmuted mt8">Anotado por ${esc(ST.formation.rivalIncompleto.by)}</div>` : ''}
+        </div>` : ''}
       ${esCapitan() ? `
         <div class="card" id="manual-card">
           <div class="flex" style="justify-content:space-between;align-items:center;">
@@ -3311,13 +3331,14 @@
             </div>
             ${['d1','d2','d3'].map(c=>{
               const pair=f[c],sum=f[c+'s'],h=getPairHist(pair[0].name,pair[1].name);
-              return `<div class="crow">
+              const noSeJuega = (c==='d3' && _rival4);
+              return `<div class="crow"${noSeJuega?' style="opacity:.55;"':''}>
                 <div class="clabel ${c}">${c.toUpperCase()}</div>
                 <div class="cplayers flex1">
                   <strong>${pair[0].name}</strong> · <strong>${pair[1].name}</strong>
-                  <small>${h&&h.tot>0?`${h.W}/${h.tot} juntos`:'Sin historial juntos'}</small>
+                  <small>${noSeJuega?'No se juega — el rival no presenta esta cancha':(h&&h.tot>0?`${h.W}/${h.tot} juntos`:'Sin historial juntos')}</small>
                 </div>
-                <div class="csum">Σ${sum}</div>
+                <div class="csum">${noSeJuega?'✓':'Σ'+sum}</div>
               </div>`;
             }).join('')}
             ${_btnConfirmar(idx, mejor)}
@@ -4263,6 +4284,55 @@
 
   // idx = índice de una formación sugerida, o directamente el objeto de la
   // formación (así el armado manual reusa exactamente el mismo guardado).
+  // ── El rival se presenta con 4 ───────────────────────────────────────────
+  // NO confundir con `modo4`, que es NUESTRA excepción del Art. 16.10 y hace que
+  // perdamos el D3. Acá es al revés: el que no puede cubrir el doble 3 es el
+  // rival, así que esa cancha es nuestra y la excepción la gasta él. Por eso son
+  // dos marcas distintas y ésta no toca excepcion4Usada().
+  //
+  // Se guarda adentro del registro de la formación porque esa ruta ya es
+  // escribible en las reglas de Firebase. Una ruta nueva quedaría bloqueada
+  // hasta publicarlas a mano desde la consola, y eso falla en silencio.
+  function rivalIncompleto() { return !!(ST.formation && ST.formation.rivalIncompleto); }
+
+  async function marcarRivalIncompleto(activar) {
+    if (!esCapitan()) { toast('Solo el capitán puede marcarlo'); return; }
+    const nm = nextMatch(); if (!nm) return;
+    if (ST.formation && ST.formation.locked) { toast('Desbloqueá la formación primero'); return; }
+    const valor = activar ? { ts: Date.now(), by: ST.player } : null;
+    try {
+      if (ST.fbOK && ST.fbDb) {
+        await ST.fbDb.ref(tp(`formation/${nm.id}/rivalIncompleto`)).set(valor);
+      } else {
+        const r = await fetch(`${CFG.fbDefaultUrl}/teams/${ST.team}/formation/${encodeURIComponent(nm.id)}/rivalIncompleto.json`,
+          { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(valor) });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const f = Object.assign({}, ST.formation || {});
+        if (valor) f.rivalIncompleto = valor; else delete f.rivalIncompleto;
+        setTeamData('formation', ST.team, f);
+      }
+      toast(activar ? '✅ Anotado: el rival se presenta con 4' : 'Quitada la marca');
+      if (activar) _novedadRivalIncompleto(nm);
+      renderParejas();
+    } catch(e) { _falla(e, 'marcar rival incompleto'); toast('⚠️ No se pudo guardar'); }
+  }
+
+  // Queda asentado con fecha y hora: si después hay discusión con la Liga sobre
+  // si el rival avisó en tiempo, el equipo tiene el registro de cuándo se supo.
+  async function _novedadRivalIncompleto(nm) {
+    if (!ST.isAdmin) return;
+    try {
+      await _newsGuardar({
+        titulo: `El rival se presenta con 4${nm ? ' · Fecha ' + nm.rueda : ''}`,
+        cuerpo: `${nm ? rival(nm) : 'El rival'} avisó que presenta sólo 4 jugadores. Se juegan el doble 1 y el doble 2; el doble 3 no se juega y es nuestro (Art. 16.10). Igual hay que presentar los 6: la pareja del D3 firma la planilla.`,
+        tipo: 'aviso',
+        autor: ST.player || '—',
+        ts: Date.now(),
+      });
+      renderNews();
+    } catch(e) { _falla(e, 'novedad rival incompleto'); }
+  }
+
   async function lockFormation(idx) {
     // El Art. 16.1 le carga al capitán la sanción por formación no reglamentaria,
     // así que la confirmación es suya. El chequeo va acá y no sólo en el render:
@@ -4283,6 +4353,10 @@
     // torneo: se relee del historial de formaciones del equipo.
     if (f.modo4) data.modo4 = true;
     else { data.d3 = f.d3.map(p=>({name:p.name})); data.d3s = f.d3s; }
+    // El rival incompleto no es nuestra excepción. Se conserva la marca porque el
+    // .set() de acá reemplaza el nodo entero y si no la borraría; y el D3 se
+    // sigue registrando porque nosotros SÍ presentamos esa pareja y firma.
+    if (ST.formation && ST.formation.rivalIncompleto) data.rivalIncompleto = ST.formation.rivalIncompleto;
     // Antes chequeaba ST.fbDb (que el objeto exista) en vez de ST.fbOK (que el
     // WebSocket esté conectado): sin WebSocket el SDK encola el write y el await
     // colgaba para siempre. Mismo bug que tenían las operaciones de admin.
