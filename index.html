@@ -1042,10 +1042,16 @@
     corsProxy:      'https://api.allorigins.win/raw?url=',
     ligaBase:       'https://www.ligacountrysur.com.ar',
     // Días antes del partido en que se cierra la asistencia. Los dos equipos
-    // juegan domingo, así que con 1 la confirmación queda abierta todo el
-    // viernes y recién cierra el sábado a las 00:00. Antes era 4 y cerraba el
-    // miércoles, demasiado temprano para gente que define sobre la semana.
-    lockDays:       1,
+    // juegan domingo, así que con 0 la confirmación queda abierta todo el sábado
+    // y recién cierra el domingo a las 00:00: el último momento para confirmar
+    // es el sábado 23:59.
+    //
+    // Historia del número: era 4 y cerraba el miércoles, demasiado temprano para
+    // gente que define sobre la semana. Pasó a 1 y cerraba el sábado 00:00, pero
+    // el sábado a la tarde es justo cuando el equipo termina de decidir y el
+    // capitán se quedaba sin poder mover a nadie. Con 0 el capitán tiene toda la
+    // noche del sábado para armar la formación.
+    lockDays:       0,
     fbKey:          'fbDbUrl',
     // URL de la base de datos — hardcodeada para que funcione en todos los dispositivos sin configuración
     fbDefaultUrl:   'https://los-disidentes-app-default-rtdb.firebaseio.com',
@@ -2498,8 +2504,20 @@
   // LBF aparecen en el nombre que publica la Liga. Si hay más de un candidato se
   // devuelve null a propósito: colgarle una derrota al jugador equivocado es peor
   // que no mostrar el dato.
+  // El apóstrofo NO separa palabras. La Liga escribe "D'arcangelo, Pablo" y la
+  // LBF dice "PABLO DARCANGELO"; como el tokenizador cortaba por todo lo que no
+  // fuera letra, de un lado salían "D" + "ARCANGELO" y del otro "DARCANGELO", y
+  // no emparejaban ni por igualdad ni por la regla de apodos. Resultado: Pablo
+  // D'Arcangelo jugó el D2 de la fecha 2 en 5ta A y sus estadísticas se perdían
+  // enteras, justo el jugador que sube de categoría y que más mira el capitán.
+  // Se borra el apóstrofo en vez de tratarlo como separador, así los dos lados
+  // quedan escritos igual sin importar cuál de los dos lo use. Los caracteres van
+  // escapados y no literales porque el limpiador de strings de qa-check.js toma
+  // un apóstrofo suelto como apertura de string y se desincroniza con el resto
+  // del archivo: reportaba 34 llamadas huérfanas que no existían.
   function _palabras(s) {
     return new Set(((s || '').normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .replace(/[\u0027\u2019\u2018\u00B4\u0060]/g, '')
       .toUpperCase().match(/[A-ZÑ]+/g)) || []);
   }
   // ¿La palabra `w` de la LBF se corresponde con alguno de los tokens `t` del
