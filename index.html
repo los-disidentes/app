@@ -2306,8 +2306,16 @@
   }
 
   // Suscribe asistencia y formación del próximo partido del equipo activo.
+  //
+  // Chequea ST.fbDb y NO ST.fbOK. Enganchar un listener no necesita que el
+  // WebSocket ya esté conectado: el SDK entrega el valor cuando conecta. Pidiendo
+  // fbOK esta función se iba de largo en el arranque —el socket todavía no había
+  // conectado— y la formación del próximo partido no se cargaba nunca:
+  // ST.formation quedaba en null toda la sesión. La asistencia sí aparecía porque
+  // se engancha por otro lado y ahí sólo se mira fbDb.
+  // La regla del proyecto es: fbOK para ESCRIBIR, fbDb para suscribirse.
   function watchTeamMatch() {
-    if (!ST.fbOK || !ST.fbDb) return;
+    if (!ST.fbDb) return;
     const nm = nextMatch();
     if (!nm) return;
     watchAttendance(nm.id);
