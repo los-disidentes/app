@@ -3183,12 +3183,17 @@
       wrap.innerHTML=`
         <div class="card" style="border-color:var(--green);">
           <div class="card-title">🔒 Formación confirmada · F${nm.rueda}</div>
-          ${(f.modo4?['d1','d2']:['d1','d2','d3']).filter(c=>f[c]).map(c=>`
+          ${((f.modo4||f.soloDos)?['d1','d2']:['d1','d2','d3']).filter(c=>f[c]).map(c=>`
             <div class="crow">
               <div class="clabel ${c}">${c.toUpperCase()}</div>
               <div class="cplayers flex1"><strong>${f[c][0].name}</strong> · <strong>${f[c][1].name}</strong></div>
               <div class="csum">Σ${f[c+'s']}</div>
             </div>`).join('')}
+          ${f.soloDos?`<div class="crow" style="opacity:.55;">
+              <div class="clabel d3">D3</div>
+              <div class="cplayers flex1"><strong>No se juega</strong><small>El rival no presenta esta cancha — es nuestra</small></div>
+              <div class="csum">✓</div>
+            </div>`:''}
           ${f.modo4?`<div class="crow" style="opacity:.55;">
               <div class="clabel d3">D3</div>
               <div class="cplayers flex1"><strong>Se pierde</strong><small>Presentación con 4 jugadores</small></div>
@@ -3312,6 +3317,19 @@
             <button class="btn btn-s btn-sm" onclick="toggleManual()" id="manual-toggle">Abrir</button>
           </div>
           <div id="manual-body" style="display:none;margin-top:12px;"></div>
+        </div>` : ''}
+      ${_rival4 && esCapitan() ? `
+        <div class="card" id="manual4-card" style="border-color:var(--green);">
+          <div class="flex" style="justify-content:space-between;align-items:center;">
+            <div class="card-title" style="margin:0;">🎾 Presentar solo las dos parejas</div>
+            <button class="btn btn-s btn-sm" onclick="toggleManual4()" id="manual4-toggle">Abrir</button>
+          </div>
+          <div class="txs tmuted mt8" style="line-height:1.5;">
+            El rival no cubre el doble 3, así que esa cancha no se juega. Armando sólo D1 y D2,
+            los otros jugadores <b>no figuran en la formación</b> y no se confunden pensando que juegan.
+            <b>No consume nuestra excepción del torneo.</b>
+          </div>
+          <div id="manual4-body" style="display:none;margin-top:12px;"></div>
         </div>` : ''}
       <div class="slabel">LAS ${formations.length} FORMACIONES POSIBLES · ART. 13</div>
       <div class="card" style="padding:11px 14px;">
@@ -3557,14 +3575,26 @@
     if (bloq) { toast('🚫 ' + bloq, 6000); return; }
     const disp = _candidatosParaManual().map(p => p.name);
     if (elegidos.some(n => disp.indexOf(n) === -1)) { toast('🚫 Hay un jugador que no está disponible'); return; }
-    const ya = excepcion4Usada();
-    if (ya) { toast('🚫 Ya usaron la excepción del Art. 16.10 en la fecha del ' + (ya.fecha||'—'), 7000); return; }
-    if (!confirm(
-        'ART. 16.10 — presentarse con 4 jugadores\n\n' +
-        '• Es la ÚNICA excepción de todo el torneo. Después no vuelve a estar disponible.\n' +
-        '• Hay que avisar al rival y a la Liga como mínimo el día anterior.\n' +
-        '• Se juegan el doble 1 y el doble 2; el doble 3 se pierde.\n\n' +
-        '¿Confirmás?')) return;
+    // Dos caminos distintos según QUIÉN es el que no cubre el doble 3.
+    const _rivalInc = rivalIncompleto();
+    if (_rivalInc) {
+      if (!confirm(
+          'PRESENTAR SOLO LAS DOS PAREJAS QUE SE JUEGAN\n\n' +
+          '• El rival avisó que se presenta con 4: el doble 3 no se juega y es nuestro.\n' +
+          '• NO consume nuestra excepción del torneo — la gasta el rival.\n' +
+          '• Los otros jugadores no van a figurar en la formación.\n\n' +
+          'OJO: si el rival finalmente se presenta con 6, el equipo incompleto pasás a ser vos.\n\n' +
+          '¿Confirmás?')) return;
+    } else {
+      const ya = excepcion4Usada();
+      if (ya) { toast('🚫 Ya usaron la excepción del Art. 16.10 en la fecha del ' + (ya.fecha||'—'), 7000); return; }
+      if (!confirm(
+          'ART. 16.10 — presentarse con 4 jugadores\n\n' +
+          '• Es la ÚNICA excepción de todo el torneo. Después no vuelve a estar disponible.\n' +
+          '• Hay que avisar al rival y a la Liga como mínimo el día anterior.\n' +
+          '• Se juegan el doble 1 y el doble 2; el doble 3 se pierde.\n\n' +
+          '¿Confirmás?')) return;
+    }
     const cand = _candidatosParaManual();
     const orden = elegidos.slice()
       .map(n => cand.find(p => p.name === n) || { name:n, lbfPos:999 })
@@ -3572,7 +3602,8 @@
     const num = {}; orden.forEach((p,i) => num[p.name] = i + 1);
     const c = assignCourts2(m.map(par => par.map(n => ({ name:n, mn:num[n] }))));
     await lockFormation(c);
-    _exc4[ST.team] = { cargado:true, usadaEn:{ id:(nextMatch()||{}).id, fecha:(nextMatch()||{}).fecha } };
+    // Sólo se anota como excepción gastada si el incompleto somos nosotros.
+    if (!_rivalInc) _exc4[ST.team] = { cargado:true, usadaEn:{ id:(nextMatch()||{}).id, fecha:(nextMatch()||{}).fecha } };
   }
 
   function renderManual() {
@@ -4351,12 +4382,17 @@
     // Art. 16.10: presentación con 4 jugadores → sólo D1 y D2, el D3 se pierde.
     // La marca `modo4` es además el registro de que se usó la excepción del
     // torneo: se relee del historial de formaciones del equipo.
-    if (f.modo4) data.modo4 = true;
-    else { data.d3 = f.d3.map(p=>({name:p.name})); data.d3s = f.d3s; }
-    // El rival incompleto no es nuestra excepción. Se conserva la marca porque el
-    // .set() de acá reemplaza el nodo entero y si no la borraría; y el D3 se
-    // sigue registrando porque nosotros SÍ presentamos esa pareja y firma.
-    if (ST.formation && ST.formation.rivalIncompleto) data.rivalIncompleto = ST.formation.rivalIncompleto;
+    const _rivalInc = ST.formation && ST.formation.rivalIncompleto;
+    if (f.modo4 && _rivalInc) {
+      // Dos parejas porque el que no cubre el doble 3 es el RIVAL. Se marca
+      // `soloDos` y NO `modo4`: si usáramos modo4, excepcion4Usada() contaría
+      // que gastamos nuestra única excepción del torneo, que es justo lo que no
+      // pasó. Son dos situaciones opuestas y no pueden compartir la marca.
+      data.soloDos = true;
+    } else if (f.modo4) {
+      data.modo4 = true;
+    } else { data.d3 = f.d3.map(p=>({name:p.name})); data.d3s = f.d3s; }
+    if (_rivalInc) data.rivalIncompleto = _rivalInc;
     // Antes chequeaba ST.fbDb (que el objeto exista) en vez de ST.fbOK (que el
     // WebSocket esté conectado): sin WebSocket el SDK encola el write y el await
     // colgaba para siempre. Mismo bug que tenían las operaciones de admin.
