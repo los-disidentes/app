@@ -4338,10 +4338,15 @@
         const r = await fetch(`${CFG.fbDefaultUrl}/teams/${ST.team}/formation/${encodeURIComponent(nm.id)}/rivalIncompleto.json`,
           { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(valor) });
         if (!r.ok) throw new Error('HTTP ' + r.status);
-        const f = Object.assign({}, ST.formation || {});
-        if (valor) f.rivalIncompleto = valor; else delete f.rivalIncompleto;
-        setTeamData('formation', ST.team, f);
       }
+      // El estado local se actualiza SIEMPRE, no sólo en el camino REST. Con
+      // WebSocket se confiaba en que el watcher devolviera el cambio, pero
+      // mientras no haya formación guardada ST.formation vale null y el watcher
+      // no refresca a tiempo: la marca quedaba bien escrita en Firebase y la
+      // pantalla no cambiaba, así que parecía que el botón no hacía nada.
+      const _f = Object.assign({}, ST.formation || {});
+      if (valor) _f.rivalIncompleto = valor; else delete _f.rivalIncompleto;
+      setTeamData('formation', ST.team, _f);
       toast(activar ? '✅ Anotado: el rival se presenta con 4' : 'Quitada la marca');
       if (activar) _novedadRivalIncompleto(nm);
       renderParejas();
