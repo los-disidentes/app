@@ -144,9 +144,12 @@ check('una cancha jugada NO se confunde con no jugada', not liga.cancha_no_jugad
 check('con un solo lado cargado NO se omite',
       not liga.cancha_no_jugada({'cancha': 3, 'local': [{'nombre': 'A', 'n': 1}],
                                  'visitante': [], 'sets': []}))
-check('con sets pero sin jugadores NO se omite',
-      not liga.cancha_no_jugada({'cancha': 3, 'local': [], 'visitante': [],
-                                 'sets': [[6, 0]]}))
+# La forma REAL del walkover: la Liga no deja la cancha en blanco, le pone '–' a
+# los jugadores y adjudica 6-0 6-0 al que se presentó. La primera versión pedía
+# que tampoco tuviera sets y por eso no se activaba nunca.
+check('el WO con 6-0 6-0 y sin jugadores SÍ se omite',
+      liga.cancha_no_jugada({'cancha': 3, 'local': [], 'visitante': [],
+                             'sets': [[6, 0], [6, 0]]}))
 
 # Y el validador sigue rechazando la cancha vacía si alguna se le cuela: el
 # filtro es la unica puerta, la validacion es la red abajo.

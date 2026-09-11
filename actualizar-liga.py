@@ -373,12 +373,25 @@ def cancha_no_jugada(c):
     quedaba sin estadísticas para nadie y el robot cortaba con error. Pasó el
     07/09/2026 en la 5ta B, contra El Sosiego Rojo.
 
-    La condición es deliberadamente estricta: vacía de los DOS lados y sin sets.
-    Si falta un solo lado, o hay sets sin jugadores, eso sí es un dato roto y
-    tiene que seguir rechazando el partido. Un stat mal atribuido es peor que no
-    tener stats.
+    OJO con la forma real del dato, que no es la que uno esperaría: la Liga NO
+    deja la cancha en blanco. La carga como walkover, con los jugadores en '–' y
+    los parciales adjudicados al que sí se presentó:
+
+        DOBLES 3 — WO · VISITANTE NO SE PRESENTÓ
+        LOCAL – vs VISITANTE –
+        1° 6-0   2° 6-0   TB 0-0
+
+    O sea que SÍ tiene sets. La primera versión de esta función pedía además que
+    no tuviera sets y por eso no se activaba nunca.
+
+    La condición es entonces: ningún jugador de NINGUNO de los dos lados. Sin
+    nadie a quien atribuirle esos games, la cancha no aporta estadística — y si
+    el parser fallara al leer los nombres, es rarísimo que fallara en los dos
+    lados a la vez. Con un solo lado vacío, o con una pareja incompleta, sigue
+    siendo un dato roto y el partido se sigue rechazando entero: un stat mal
+    atribuido es peor que no tener stats.
     """
-    return not c['local'] and not c['visitante'] and not c['sets']
+    return not c['local'] and not c['visitante']
 
 
 def validar_resultados(eq, resultados):
