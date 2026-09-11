@@ -272,6 +272,11 @@ def armar_resultados(partidos, eq, fixture):
         except Exception as e:
             avisos.append(f'{eq} F{rueda}: no se pudo leer el detalle — {e}')
             continue
+        omitidas = [c for c in canchas if cancha_no_jugada(c)]
+        if omitidas:
+            canchas = [c for c in canchas if not cancha_no_jugada(c)]
+            cuales = ', '.join(f'D{c["cancha"]}' for c in omitidas)
+            print(f'    F{rueda}: {cuales} no se jugó (Art. 16.10), se omite del detalle')
         if not canchas:
             avisos.append(f'{eq} F{rueda}: el detalle no tiene canchas cargadas')
             continue
@@ -356,6 +361,24 @@ def validar(eq, fixture, tabla):
             err.append(f'parciales no coinciden: fixture {pf}-{pc}, tabla '
                        f'{yo["PuntosFavor"]}-{yo["PuntosContra"]}')
     return err
+
+
+def cancha_no_jugada(c):
+    """Una cancha que directamente no se disputó.
+
+    Art. 16.10: un equipo puede presentarse a jugar con 4 jugadores y entonces el
+    doble 3 no se juega. La Liga carga esa cancha vacía y es un dato legítimo, no
+    un dato roto — pero validar_resultados() la rechazaba por "no tiene 2
+    jugadores" y con eso tiraba abajo el detalle ENTERO del partido: la fecha se
+    quedaba sin estadísticas para nadie y el robot cortaba con error. Pasó el
+    07/09/2026 en la 5ta B, contra El Sosiego Rojo.
+
+    La condición es deliberadamente estricta: vacía de los DOS lados y sin sets.
+    Si falta un solo lado, o hay sets sin jugadores, eso sí es un dato roto y
+    tiene que seguir rechazando el partido. Un stat mal atribuido es peor que no
+    tener stats.
+    """
+    return not c['local'] and not c['visitante'] and not c['sets']
 
 
 def validar_resultados(eq, resultados):

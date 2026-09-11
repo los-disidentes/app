@@ -129,6 +129,35 @@ check('respeta el (n) del reglamento',
 check('nombre limpio', b[0]['visitante'][0]['nombre'] == 'correa, sebastian',
       b[0]['visitante'][0]['nombre'])
 
+print('\n7. Art. 16.10 — la cancha que no se jugó no tira abajo el partido')
+# El 07/09/2026 El Sosiego Rojo se presentó con 4: el doble 3 no se jugó y la
+# Liga lo cargó vacío. La validación lo rechazaba por "no tiene 2 jugadores" y
+# el detalle entero de la fecha se perdía, además de cortar el robot con error.
+vacia   = {'cancha': 3, 'local': [], 'visitante': [], 'sets': []}
+jugada  = {'cancha': 1, 'local': [{'nombre': 'A', 'n': 1}, {'nombre': 'B', 'n': 2}],
+           'visitante': [{'nombre': 'C', 'n': 1}, {'nombre': 'D', 'n': 2}],
+           'sets': [[6, 4], [6, 2]], 'ganoLocal': True}
+check('la cancha vacía se reconoce como no jugada', liga.cancha_no_jugada(vacia))
+check('una cancha jugada NO se confunde con no jugada', not liga.cancha_no_jugada(jugada))
+
+# La garantía que no se afloja: medio dato sigue siendo dato roto.
+check('con un solo lado cargado NO se omite',
+      not liga.cancha_no_jugada({'cancha': 3, 'local': [{'nombre': 'A', 'n': 1}],
+                                 'visitante': [], 'sets': []}))
+check('con sets pero sin jugadores NO se omite',
+      not liga.cancha_no_jugada({'cancha': 3, 'local': [], 'visitante': [],
+                                 'sets': [[6, 0]]}))
+
+# Y el validador sigue rechazando la cancha vacía si alguna se le cuela: el
+# filtro es la unica puerta, la validacion es la red abajo.
+uno = {'rueda': 3, 'local': 'Miralagos Los Disidentes B', 'visitor': 'X',
+       'canchas': [jugada, vacia]}
+check('si una vacía llega a validarse, sigue rechazando',
+      any('no tiene 2 jugadores' in e for e in liga.validar_resultados('5B', [uno])))
+solo_jugadas = {**uno, 'canchas': [jugada]}
+check('sin la vacía, el partido pasa la validación',
+      liga.validar_resultados('5B', [solo_jugadas]) == [])
+
 print()
 if fallos:
     print(f'✗ {len(fallos)} test(s) fallaron: ' + ' · '.join(fallos))
