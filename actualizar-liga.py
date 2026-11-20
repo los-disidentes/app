@@ -172,18 +172,43 @@ def horarios_publicados(partidos):
     return {r for r, horas in por_fecha.items() if len({h for h in horas if h}) > 1}
 
 
+def numero_orden(txt):
+    """'7' → 7 · '3.1' → 3.1 · '3,1' → 3.1
+
+    El número de la lista de buena fe casi siempre es entero, pero no siempre:
+    un jugador que entra intercalado (el "bis" del Art. 2.12) se publica con
+    decimal. Se devuelve int cuando es entero para no cambiar ni un byte de los
+    JSON que ya están commiteados.
+    """
+    v = float(txt.replace(',', '.'))
+    return int(v) if v.is_integer() else v
+
+
 def leer_jugadores(texto):
     """'CAMPOS, RODOLFO (1), Steremberg, Tomas (4)' → dos jugadores con su número.
 
     Ojo con la coma: separa el apellido del nombre Y separa un jugador del otro,
     así que no sirve para partir. Lo que sí es inequívoco es el '(n)' del final de
     cada jugador, que además es su número de orden en la lista de buena fe.
+
+    OJO CON EL NÚMERO DECIMAL (esto rompió el robot el 16/11/2026).
+    El (n) no siempre es entero: la fecha 8 de la 5ta B trajo
+    'Demartino, Nicolas (3.1), Santos, Walter D. (5)'. Con '\\((\\d+)\\)' el
+    paréntesis de Demartino no cerraba, el regex seguía de largo y la cancha
+    quedaba con UN solo jugador en vez de dos. Y lo peor: sin error. La
+    validación lo cazaba después, como 'el lado local no tiene 2 jugadores',
+    y tiraba abajo el detalle entero — de las dos categorías, porque el script
+    termina con código 1 y el paso de commit nunca corre. 12 corridas seguidas
+    en rojo por un punto decimal.
+
+    Por eso el número se lee como decimal opcional: si la Liga lo publica así,
+    es un dato legítimo, no un dato roto.
     """
     out = []
-    for trozo in re.findall(r'([^()]+)\((\d+)\)', texto or ''):
+    for trozo in re.findall(r'([^()]+)\((\d+(?:[.,]\d+)?)\)', texto or ''):
         nombre = limpiar(trozo[0]).strip(' ,')
         if nombre:
-            out.append({'nombre': nombre, 'n': int(trozo[1])})
+            out.append({'nombre': nombre, 'n': numero_orden(trozo[1])})
     return out
 
 

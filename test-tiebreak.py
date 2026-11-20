@@ -161,6 +161,44 @@ solo_jugadas = {**uno, 'canchas': [jugada]}
 check('sin la vacía, el partido pasa la validación',
       liga.validar_resultados('5B', [solo_jugadas]) == [])
 
+print('\n8. El (n) decimal no se come al jugador')
+# El 15/11/2026 la 5ta B trajo 'Demartino, Nicolas (3.1)'. El regex viejo pedía
+# sólo dígitos: el paréntesis no cerraba, seguía de largo y devolvía UN jugador
+# en vez de dos, sin avisar. La validación lo rechazaba después y el robot
+# cortaba con error las dos categorías. El test se escribe con el texto REAL de
+# la página, no con el que uno supondría.
+real = 'Demartino, Nicolas (3.1), Santos, Walter D. (5)'
+par = liga.leer_jugadores(real)
+check('devuelve los 2 jugadores', len(par) == 2, par)
+check('no se pierde el del decimal',
+      [j['nombre'] for j in par] == ['Demartino, Nicolas', 'Santos, Walter D.'], par)
+check('guarda el número tal cual', [j['n'] for j in par] == [3.1, 5], par)
+
+# Los enteros siguen siendo int: si se volvieran float, los JSON ya commiteados
+# cambiarían de "7" a "7.0" y el robot commitearía ruido en cada corrida.
+enteros = liga.leer_jugadores('CERULLI, GUSTAVO (10), Connell, Facundo (11)')
+check('el entero sigue siendo int, no float',
+      all(isinstance(j['n'], int) for j in enteros), enteros)
+# Sin el len() primero, una regresión acá revienta con IndexError y se lleva
+# puesto el resto de la suite en vez de reportar un test en rojo.
+coma = liga.leer_jugadores('Perez, Juan (3,2)')
+check('la coma decimal también se entiende',
+      len(coma) == 1 and coma[0]['n'] == 3.2, coma)
+check('el (0) de las fichas sin numerar sigue andando',
+      liga.leer_jugadores('DOMINGUEZ, Carlos Javier (0), Calió, Lucas Esteban (0)')
+      == [{'nombre': 'DOMINGUEZ, Carlos Javier', 'n': 0},
+          {'nombre': 'Calió, Lucas Esteban', 'n': 0}])
+
+# Y la cancha real de esa fecha ahora pasa entera.
+f8 = {'cancha': 1,
+      'local': liga.leer_jugadores(real),
+      'visitante': liga.leer_jugadores('Sconfienza, Fernando (4), ESPELET, SEBASTIAN (5)'),
+      'sets': [[6, 1], [6, 0]], 'ganoLocal': True}
+check('la fecha 8 de la 5B pasa la validación',
+      liga.validar_resultados('5B', [{'rueda': 8, 'local': 'X',
+                                      'visitor': 'Miralagos Los Disidentes B',
+                                      'canchas': [f8]}]) == [])
+
 print()
 if fallos:
     print(f'✗ {len(fallos)} test(s) fallaron: ' + ' · '.join(fallos))
